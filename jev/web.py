@@ -22,7 +22,7 @@ load_dotenv()
 
 DB_PATH = os.environ.get("POCKETNOOK_SQLITE_PATH", str(Path(__file__).resolve().parent.parent / "jev.db"))
 STATIC = Path(__file__).parent / "static"
-VERSION = "2026-09-29.4"  # bump on deploy-relevant changes; shown at /api/health
+VERSION = "2026-09-29.5"  # bump on deploy-relevant changes; shown at /api/health
 MAX_RUNNING = 3  # each run spends real money on Claude
 REQUIRED_KEYS = ("ANTHROPIC_API_KEY", "TYPESAFE_API_KEY")
 
@@ -69,15 +69,43 @@ class CheckIn(BaseModel):
     search: bool = True
 
 
+class Live:
+    """In-memory progress for a running job: a log of small events plus the latest partial answer per stage."""
+
+    def __init__(self) -> None:
+        self.lock = threading.Lock()
+        self.stage = "drafting"
+        self.events: list[dict] = []
+        self.partial: dict[str, dict] = {}
+
+    def __call__(self, stage: str, kind: str, payload: dict) -> None:
+        with self.lock:
+            self.stage = stage if kind != "done" else self.stage
+            if kind == "partial":
+                self.partial[stage] = payload
+            else:
+                self.events.append({"stage": stage, "kind": kind, **payload, "t": round(time.time(), 2)})
+
+    def view(self, after: int) -> dict:
+        with self.lock:
+            return {"stage": self.stage, "events": self.events[after:], "cursor": len(self.events), "partial": dict(self.partial)}
+
+
+LIVE: dict[str, Live] = {}
+
+
 def _work(job_id: str, body: CheckIn) -> None:
+    live = LIVE[job_id]
     try:
-        report = run(body.request, search=body.search, save=False)
+        report = run(body.request, search=body.search, save=False, on_event=live)
         payload = report.model_dump() | {"summary": report.summary()}
         with db() as conn:
             conn.execute("update jobs set status='done', report=?, finished=? where id=?", (json.dumps(payload), time.time(), job_id))
     except Exception as e:
         with db() as conn:
             conn.execute("update jobs set status='error', error=?, finished=? where id=?", (f"{type(e).__name__}: {e}", time.time(), job_id))
+    finally:
+        threading.Timer(300, LIVE.pop, args=(job_id, None)).start()  # keep briefly for late pollers
 
 
 @app.get("/api/health")
@@ -100,17 +128,20 @@ def check(body: CheckIn):
             raise HTTPException(429, "Too many checks running. Try again in a minute.")
         job_id = uuid.uuid4().hex[:12]
         conn.execute("insert into jobs (id, request, status, created) values (?, ?, 'running', ?)", (job_id, text, time.time()))
+    LIVE[job_id] = Live()
     threading.Thread(target=_work, args=(job_id, body.model_copy(update={"request": text})), daemon=True).start()
     return {"id": job_id}
 
 
 @app.get("/api/jobs/{job_id}")
-def job(job_id: str):
+def job(job_id: str, after: int = 0):
     with db() as conn:
         row = conn.execute("select * from jobs where id=?", (job_id,)).fetchone()
     if row is None:
         raise HTTPException(404, "No such job.")
+    live = LIVE.get(job_id)
     return {
+        "live": live.view(after) if live and row["status"] == "running" else None,
         "id": row["id"],
         "request": row["request"],
         "status": row["status"],

@@ -93,7 +93,7 @@ async def _ask(client: AsyncTypeSafeClient, sem: asyncio.Semaphore, state: dict,
     return out
 
 
-async def verify_async(trace: Trace, documents: dict[str, str]) -> tuple[list[Verdict], dict]:
+async def verify_async(trace: Trace, documents: dict[str, str], on_event=None) -> tuple[list[Verdict], dict]:
     verdicts: list[Verdict] = []
     jobs: list[tuple[str, dict, dict]] = []  # (tag, state, questions)
     passages: dict[str, str] = {}
@@ -139,6 +139,8 @@ async def verify_async(trace: Trace, documents: dict[str, str]) -> tuple[list[Ve
         else:
             jobs.append((f"fac:S{i}", {"sentence": s.text}, {"factual": SENTENCE_FACTUAL}))
 
+    if on_event:
+        on_event("checking", {"checks": len(jobs) + len(verdicts)})
     sem = asyncio.Semaphore(CONCURRENCY)
     async with AsyncTypeSafeClient(model=JEV_MODEL) as client:
         results = await asyncio.gather(*(_ask(client, sem, st, qs) for _, st, qs in jobs))
@@ -205,5 +207,5 @@ def _v(target, check, status, conf, probs, note="") -> Verdict:
     return Verdict(target=target, check=check, status=status, confidence=conf, probabilities=probs, note=note, needs_review=conf is not None and conf < REVIEW_BELOW)
 
 
-def verify(trace: Trace, documents: dict[str, str]) -> tuple[list[Verdict], dict]:
-    return asyncio.run(verify_async(trace, documents))
+def verify(trace: Trace, documents: dict[str, str], on_event=None) -> tuple[list[Verdict], dict]:
+    return asyncio.run(verify_async(trace, documents, on_event))

@@ -2,6 +2,14 @@
 
 Answer any request with an **epistemic trace**, then check the trace with **Jev**, [TypeSafe](https://docs.typesafe.ai/)'s System One model.
 
+Every request runs in three stages, all shown live in the web app:
+
+- **Drafting** (streamed): Claude researches and writes the answer with its argument.
+- **Verifying**: code and Jev check every link of the draft.
+- **Confirming** (streamed, only when something failed): Claude revises from the findings, without new research, and Jev checks the revision. The page shows the final answer, with the first draft one click away.
+
+How the checking works:
+
 1. **Claude** (`claude-opus-5-5`, with web search and fetch) answers the request and records its argument in Toulmin form: premises with a basis, source URL and verbatim quote; claims with grounds, warrant, backing, qualifier and rebuttals; and the answer split into sentences, each citing the claims it asserts.
 2. **Code** checks what code can check exactly: is each quote really in the fetched page, do references point at real ids, and which conclusions rest on a failed premise.
 3. **Jev** checks each link with one small call per link:
@@ -24,6 +32,7 @@ uv sync
 # .env needs ANTHROPIC_API_KEY and TYPESAFE_API_KEY
 uv run jev "Who designed the Brooklyn Bridge, and when did it open?"
 uv run jev --no-search --json "..."
+uv run jev --no-confirm "..."     # stop after verifying; show the checked first draft
 uv run jev-web            # http://localhost:8000
 ```
 

@@ -94,6 +94,35 @@ kbd { font: inherit; border: 1px solid var(--rule); border-bottom-width: 2px; bo
 .chip.warn { background: var(--warn-wash); color: var(--warn); } .chip.bad { background: var(--bad-wash); color: var(--bad); }
 .nested { margin-left: 32px; }
 
+.progress { margin-top: 28px; max-width: 720px; }
+.stages { list-style: none; margin: 0; padding: 0; }
+.stage { position: relative; padding: 0 0 22px 30px; }
+.stage::before { content: ""; position: absolute; left: 7px; top: 20px; bottom: 0; width: 1px; background: var(--rule); }
+.stage:last-child::before { display: none; }
+.state { position: absolute; left: 0; top: 3px; width: 15px; height: 15px; border-radius: 50%; border: 1.5px solid var(--rule); background: var(--paper); }
+.stage.active .state { border-color: var(--rule); border-top-color: var(--accent); animation: spin .9s linear infinite; }
+.stage.done .state { border-color: var(--accent); background: var(--accent); }
+.stage.done .state::after { content: ""; position: absolute; left: 4px; top: 1px; width: 3px; height: 7px; border: solid var(--accent-ink); border-width: 0 1.5px 1.5px 0; transform: rotate(45deg); }
+.stage.skipped .state { border-style: dashed; }
+@media (prefers-reduced-motion: reduce) { .stage.active .state { animation: none; border-color: var(--accent); } }
+.stage-name { font-weight: 600; font-size: 15px; }
+.stage.pending .stage-name { color: var(--faint); font-weight: 500; }
+.stage-note { color: var(--slate); font-size: 14px; margin-left: 8px; }
+.activity { list-style: none; margin: 8px 0 0; padding: 0; font-size: 13px; color: var(--slate); }
+.activity li { padding: 2px 0; overflow-wrap: anywhere; }
+.activity .failed { color: var(--faint); text-decoration: line-through; }
+.preview { font: 400 18px/1.6 var(--serif); color: var(--slate); margin: 12px 0 0; }
+.preview::after { content: ""; display: inline-block; width: 7px; height: 1.05em; margin-left: 2px; vertical-align: -2px; background: var(--accent); animation: blink 1s steps(1) infinite; }
+.stage:not(.active) .preview::after { display: none; }
+@keyframes blink { 50% { opacity: 0; } }
+@media (prefers-reduced-motion: reduce) { .preview::after { animation: none; } }
+
+.outcome { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 14px; margin: 0 0 18px; padding: 10px 14px; border-radius: 10px;
+  background: var(--surface); border: 1px solid var(--rule); font-size: 14px; color: var(--slate); }
+.outcome b { color: var(--ink); font-weight: 600; }
+.linkbtn { font: inherit; background: none; border: 0; padding: 0; color: var(--accent); cursor: pointer; text-decoration: underline; text-underline-offset: 3px; }
+.viewing-draft .answer { color: var(--slate); }
+
 .argument { margin-top: 36px; }
 .argument details { border-top: 1px solid var(--rule); }
 .argument details:last-child { border-bottom: 1px solid var(--rule); }
@@ -169,20 +198,66 @@ $("f").addEventListener("submit", async e => {
   } catch (err) { busy(false); status(`<span class="error">${esc(err.message)}</span>`); }
 });
 
+let live = null;  // {id, cursor, log, stage, partial, done:Set, notes:{}}
+
 async function poll(id) {
+  if (!live || live.id !== id) live = { id, cursor: 0, log: [], partial: {}, done: new Set(), notes: {} };
   let r;
-  try { r = await (await fetch(`${BASE}api/jobs/${id}`)).json(); }
-  catch { return setTimeout(() => poll(id), 3000); }
+  try { r = await (await fetch(`${BASE}api/jobs/${id}?after=${live.cursor}`)).json(); }
+  catch { return setTimeout(() => poll(id), 2500); }
   if (r.status === "running") {
-    status(`Researching and writing out the argument, ${Math.round(r.elapsed)}s`, true);
-    return setTimeout(() => poll(id), 2000);
+    status("");
+    if (r.live) absorb(r.live); else live.stage = live.stage || "drafting";
+    renderProgress(r.elapsed);
+    return setTimeout(() => poll(id), 600);
   }
   busy(false);
   if (r.status === "error") { status(`<span class="error">${esc(r.error)}</span>`); return; }
   if (!r.report) { status(`<span class="error">That check was not found.</span>`); return; }
   if (!q.value) { q.value = r.request; grow(); }
   status("");
-  render(r.report);
+  render(r.report, r.elapsed);
+}
+
+function absorb(v) {
+  live.cursor = v.cursor; live.stage = v.stage; live.partial = v.partial || {};
+  for (const e of v.events) {
+    live.log.push(e);
+    if (e.kind === "checking") live.notes[e.stage] = e.stage === "verifying" ? `Checking ${e.checks} links with Jev` : `Checking the revision: ${e.checks} links`;
+    if (e.kind === "done" && e.stage === "verifying") {
+      live.done.add("drafting"); live.done.add("verifying");
+      live.notes.verifying = e.problems ? `${plural(e.problems, "problem")} in ${e.flagged_sentences.length} of ${plural(e.sentences, "sentence")}` : "No problems found";
+      live.fix = e.problems;
+    }
+    if (e.kind === "skipped") { live.done.add("confirming"); live.skipped = true; live.notes.confirming = `Not needed: ${e.reason}`; }
+  }
+  if (live.stage !== "drafting") live.done.add("drafting");
+  if (live.stage === "confirming") { live.done.add("verifying"); if (!live.notes.confirming && !live.skipped) live.notes.confirming = `Rewriting the answer to fix ${plural(live.fix || 0, "problem")}`; }
+}
+
+const STAGES = [["drafting", "Drafting"], ["verifying", "Verifying with Jev"], ["confirming", "Confirming the answer"]];
+
+function answerText(partial) {
+  return (partial?.answer || []).map(a => a?.text || "").filter(Boolean).join(" ");
+}
+
+function renderProgress(elapsed) {
+  const idx = STAGES.findIndex(([k]) => k === live.stage);
+  const draft = live.partial.drafting || {};
+  const counts = [draft.premises?.length && plural(draft.premises.length, "premise"), draft.claims?.length && plural(draft.claims.length, "claim")].filter(Boolean);
+  const acts = live.log.filter(e => e.stage === "drafting" && (e.kind === "search" || e.kind === "read")).map(e =>
+    e.kind === "search" ? `<li>Searched for “${esc(e.query)}”</li>` : `<li class="${e.ok ? "" : "failed"}">Read ${esc(host(e.url))}</li>`).join("");
+  const body = {
+    drafting: `${acts ? `<ul class="activity">${acts}</ul>` : ""}${counts.length ? `<ul class="activity"><li>Recorded ${counts.join(" and ")}</li></ul>` : ""}${answerText(draft) ? `<p class="preview">${esc(answerText(draft))}</p>` : ""}`,
+    verifying: "",
+    confirming: answerText(live.partial.confirming) ? `<p class="preview">${esc(answerText(live.partial.confirming))}</p>` : "",
+  };
+  const note = { drafting: `${Math.round(elapsed)}s`, ...live.notes };
+  $("out").innerHTML = `<section class="progress" aria-label="Progress"><ol class="stages">${STAGES.map(([k, name], i) => {
+    const state = live.done.has(k) ? (k === "confirming" && live.skipped ? "done skipped" : "done") : i === idx ? "active" : i < idx ? "done" : "pending";
+    const show = state !== "pending";
+    return `<li class="stage ${state}"><span class="state" aria-hidden="true"></span><span class="stage-name">${name}</span>${show && note[k] ? `<span class="stage-note">${esc(note[k])}</span>` : ""}${show ? body[k] : ""}</li>`;
+  }).join("")}</ol></section>`;
 }
 
 // ---- result ----------------------------------------------------------------
@@ -220,21 +295,46 @@ function showNotes(i) {
     ${cited.length ? cited.map(n => n.claim ? claimHTML(n) : premiseHTML(n)).join("") : `<p class="hint">This sentence doesn't cite any part of the argument.</p>`}`;
 }
 
-function render(r) {
+let finalReport = null, showingDraft = false;
+
+function render(r, elapsed) {
+  finalReport = r; showingDraft = false;
+  paint(r);
+}
+
+function toggleDraft() {
+  showingDraft = !showingDraft;
+  const d = finalReport.draft;
+  paint(showingDraft ? { ...finalReport, trace: d.trace, verdicts: d.verdicts, summary: d.summary } : finalReport);
+}
+
+function outcomeHTML() {
+  const r = finalReport, d = r.draft;
+  if (!d) return `<div class="outcome"><span><b>Verified.</b> Jev found no problems in the first draft, so it stands as the final answer.</span></div>`;
+  const fs = r.summary;
+  const line = showingDraft
+    ? `<span><b>First draft.</b> ${plural(d.summary.problems, "problem")} in ${d.summary.flagged_sentences.length} of ${plural(d.summary.sentences, "sentence")}.</span>`
+    : `<span><b>Confirmed.</b> Verification found ${plural(d.summary.problems, "problem")} in the first draft; this revision has ${fs.problems}.</span>`;
+  return `<div class="outcome">${line}<button class="linkbtn" type="button" onclick="toggleDraft()">${showingDraft ? "Show final answer" : "Compare with first draft"}</button></div>`;
+}
+
+function paint(r) {
   report = r; byTarget = {}; nodes = {};
   for (const v of r.verdicts) (byTarget[v.target] ??= []).push(v);
   for (const p of r.trace.premises) nodes[p.id] = p;
   for (const c of r.trace.claims) nodes[c.id] = c;
   const s = r.summary, m = r.meta, t = r.trace;
+  const revised = m.revise_seconds != null ? ` Revised in ${Math.round(m.revise_seconds)}s.` : "";
   const counts = { ok: 0, warn: 0, bad: 0 };
   const answer = t.answer.map((a, i) => {
     const lv = level(byTarget[`S${i + 1}`] ?? []); counts[lv]++;
     return `<span class="s ${lv}" data-i="${i}" tabindex="0" role="button">${esc(a.text)}</span>`;
   }).join(" ");
   $("out").innerHTML = `
-    <div class="result">
+    <div class="result${showingDraft ? " viewing-draft" : ""}">
       <section aria-label="Answer">
         <p class="question">${esc(r.request)}</p>
+        ${outcomeHTML()}
         <p class="answer">${answer}</p>
         <div class="tally">
           <span><span class="dot ok"></span><b>${counts.ok}</b> backed by the argument</span>
@@ -246,7 +346,7 @@ function render(r) {
           <details><summary>Full argument: ${plural(t.claims.length, "claim")}</summary>${t.claims.map(c => claimHTML(c, 2)).join("")}</details>
           <details><summary>Evidence: ${plural(t.premises.length, "premise")}</summary>${t.premises.map(premiseHTML).join("")}</details>
         </div>
-        <p class="foot">Written by ${esc(m.claude_model)} in ${Math.round(m.trace_seconds)}s. Checked by ${esc((m.jev_models || []).join(", "))} in ${m.verify_seconds}s across ${m.jev_calls} questions.</p>
+        <p class="foot">Drafted by ${esc(m.claude_model)} in ${Math.round(m.trace_seconds)}s.${revised} Checked by ${esc((m.jev_models || []).join(", "))} in ${m.verify_seconds}s across ${m.jev_calls} questions.</p>
       </section>
       <aside class="notes" id="notes" aria-live="polite">
         <h2>Why this sentence</h2>
@@ -261,6 +361,7 @@ function render(r) {
   const first = t.answer.findIndex((_, i) => level(byTarget[`S${i + 1}`] ?? []) === "bad");
   if (first >= 0 && matchMedia("(min-width: 980px)").matches) showNotes(first);
 }
+window.toggleDraft = toggleDraft;
 
 // ---- recent ----------------------------------------------------------------
 async function recent() {

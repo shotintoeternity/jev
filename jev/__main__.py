@@ -51,6 +51,10 @@ def render(r: Report) -> str:
 
     s = r.summary()
     m = r.meta
+    if r.draft:
+        d = r.draft.summary
+        lines += ["", f"CONFIRMED: first draft had {d['problems']} problems in {len(d['flagged_sentences'])}/{d['sentences']} sentences; "
+                  f"the revision has {s['problems']} in {len(s['flagged_sentences'])}/{s['sentences']}"]
     lines += [
         "",
         f"{s['sentences'] - len(s['flagged_sentences'])}/{s['sentences']} answer sentences clean; "
@@ -61,6 +65,19 @@ def render(r: Report) -> str:
     return "\n".join(lines)
 
 
+def _progress(stage: str, kind: str, payload: dict) -> None:
+    if kind == "search":
+        print(f"  [{stage}] searching: {payload['query']}", file=sys.stderr)
+    elif kind == "read":
+        print(f"  [{stage}] read {payload['url']}" + ("" if payload["ok"] else " (failed)"), file=sys.stderr)
+    elif kind == "checking":
+        print(f"  [{stage}] checking {payload['checks']} links with Jev", file=sys.stderr)
+    elif kind == "done" and stage == "verifying":
+        print(f"  [verifying] {payload['problems']} problems", file=sys.stderr)
+    elif kind == "skipped":
+        print(f"  [confirming] skipped: {payload['reason']}", file=sys.stderr)
+
+
 def main() -> None:
     load_dotenv()
     ap = argparse.ArgumentParser(prog="jev", description="Answer a request with an epistemic trace, then check it with Jev.")
@@ -68,9 +85,10 @@ def main() -> None:
     ap.add_argument("--no-search", action="store_true", help="answer from memory only")
     ap.add_argument("--effort", default="high", choices=["low", "medium", "high", "xhigh", "max"])
     ap.add_argument("--json", action="store_true", help="print the full report as JSON")
+    ap.add_argument("--no-confirm", action="store_true", help="skip the revision step; show the checked first draft")
     a = ap.parse_args()
     request = " ".join(a.request) or sys.stdin.read()
-    report = run(request.strip(), search=not a.no_search, effort=a.effort)
+    report = run(request.strip(), search=not a.no_search, effort=a.effort, confirm=not a.no_confirm, on_event=_progress)
     print(report.model_dump_json(indent=1) if a.json else render(report))
 
 
