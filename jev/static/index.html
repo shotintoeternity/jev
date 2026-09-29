@@ -74,6 +74,8 @@ const WARN = new Set(["unverified","weak","overclaimed"]);
 const level = vs => vs.some(v => BAD.has(v.status)) ? "bad" : vs.some(v => WARN.has(v.status) || v.needs_review) ? "warn" : "good";
 const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
 const $ = id => document.getElementById(id);
+// Works at a domain root or under a path prefix such as /s/nook-abc/.
+const BASE = location.pathname.endsWith("/") ? location.pathname : location.pathname + "/";
 
 function tags(vs) {
   return `<div class="tags">${vs.map(v => {
@@ -117,7 +119,7 @@ function render(r) {
 }
 
 async function poll(id) {
-  const r = await (await fetch(`/api/jobs/${id}`)).json();
+  const r = await (await fetch(`${BASE}api/jobs/${id}`)).json();
   if (r.status === "running") {
     $("status").textContent = `Claude is researching and building the trace… ${Math.round(r.elapsed)}s`;
     return setTimeout(() => poll(id), 2000);
@@ -132,7 +134,7 @@ async function poll(id) {
 $("f").addEventListener("submit", async e => {
   e.preventDefault();
   $("go").disabled = true; $("out").innerHTML = ""; $("status").textContent = "Starting…";
-  const res = await fetch("/api/check", {method: "POST", headers: {"Content-Type": "application/json"},
+  const res = await fetch(`${BASE}api/check`, {method: "POST", headers: {"Content-Type": "application/json"},
     body: JSON.stringify({request: $("q").value, search: $("search").checked})});
   const body = await res.json();
   if (!res.ok) { $("go").disabled = false; $("status").innerHTML = `<span class="err">${esc(body.detail)}</span>`; return; }

@@ -22,6 +22,7 @@ load_dotenv()
 
 DB_PATH = os.environ.get("POCKETNOOK_SQLITE_PATH", str(Path(__file__).resolve().parent.parent / "jev.db"))
 STATIC = Path(__file__).parent / "static"
+VERSION = "2026-09-29.2"  # bump on deploy-relevant changes; shown at /api/health
 MAX_RUNNING = 3  # each run spends real money on Claude
 REQUIRED_KEYS = ("ANTHROPIC_API_KEY", "TYPESAFE_API_KEY")
 
@@ -79,7 +80,7 @@ def _work(job_id: str, body: CheckIn) -> None:
 @app.get("/api/health")
 def health():
     keys = key_status()
-    return {"ok": all(v.startswith("set (") and "stray" not in v for v in keys.values()), "keys": keys}
+    return {"version": VERSION, "ok": all(v.startswith("set (") and "stray" not in v for v in keys.values()), "keys": keys}
 
 
 @app.post("/api/check")
