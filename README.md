@@ -10,7 +10,7 @@ Every request runs in three stages, all shown live in the web app:
 
 How the checking works:
 
-1. **Claude** (`claude-opus-5-5`, with web search and fetch) answers the request and records its argument in Toulmin form: premises with a basis, source URL and verbatim quote; claims with grounds, warrant, backing, qualifier and rebuttals; and the answer split into sentences, each citing the claims it asserts.
+1. **Claude** (`claude-sonnet-5-5` by default, set `JEV_CLAUDE_MODEL=claude-opus-5-5` for Opus; with web search and fetch) answers the request and records its argument in Toulmin form: premises with a basis, source URL and verbatim quote; claims with grounds, warrant, backing, qualifier and rebuttals; and the answer split into sentences, each citing the claims it asserts.
 2. **Code** checks what code can check exactly: is each quote really in the fetched page, do references point at real ids, and which conclusions rest on a failed premise.
 3. **Jev** checks each link with one small call per link:
 
@@ -49,7 +49,7 @@ uv run python -m evals.inject     # fault injection: plant known errors, measure
 
 Question wording and thresholds live at the top of `jev/verify.py`. Change them there, then rerun the eval.
 
-### Results (2026-09-29, jev-1.13.0, claude-opus-5-5)
+### Results (2026-09-29, jev-1.13.0; traces from claude-opus-5-5, holdout rechecked on claude-sonnet-5-5)
 
 Mutants caught, by fault type. `requests.txt` (12 traces) is the set the wording and thresholds were tuned on. `holdout.txt` (6 traces) was run once, with nothing changed afterwards except a quote-matching bug it exposed.
 
@@ -68,6 +68,8 @@ What the tuning showed:
 - **Numbers belong in code.** Jev accepted 59½→79½ and 1922→4922 as "supported". A code check that every number in a premise appears in its passage catches all of these.
 - **Warrants leak.** Claude's warrants often restate the claim, so "does it follow given grounds + warrant" passed claims whose grounds had been swapped out. Asking again with the grounds alone catches them. When a general rule bridges the gap, the claim is marked `weak`, not `non_sequitur`.
 - **Wording matters.** "Is everything in the sentence covered?" scored ~0.5 even on verbatim matches. "Does the sentence add anything?" separated cleanly.
+
+On Sonnet 5.5 traces (holdout, after requiring that cited pages be fetched): fabricated quote 12/12, changed number 13/13, dropped grounds 9/9, untraced sentence 17/17. Sonnet drafts add more untraced detail than Opus (20 of 58 clean items flagged), which the confirming step then removes or labels.
 
 Known gaps:
 - **Overclaim is weak.** Claude called 20 of 27 claims "very likely" and never used anything below "probably". Jev's evidence score does discriminate (1.8–3.9 with grounds, mostly 0.1–2.5 without), but the flag threshold is conservative.

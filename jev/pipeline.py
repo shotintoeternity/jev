@@ -69,7 +69,7 @@ def run(
     request: str,
     *,
     search: bool = True,
-    effort: str = "high",
+    effort: str = "medium",
     confirm: bool = True,
     save: bool = True,
     on_event: Progress | None = None,

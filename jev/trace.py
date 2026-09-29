@@ -1,6 +1,7 @@
 """Stage 1: Claude answers the request and records a Toulmin trace, citing pages it fetched."""
 
 import datetime as dt
+import os
 import time
 from collections.abc import Callable
 from dataclasses import dataclass, field
@@ -11,7 +12,9 @@ import jiter
 from . import cache
 from .schema import Trace
 
-MODEL = "claude-opus-5-5"
+# Sonnet 5.5: roughly half Opus 5.5's price and faster. Override with JEV_CLAUDE_MODEL (e.g. claude-opus-5-5).
+MODEL = os.environ.get("JEV_CLAUDE_MODEL", "claude-sonnet-5-5")
+DRAFT_EFFORT = "medium"
 
 # on_event(kind, payload): kind is "search", "fetch", "read", or "partial" (a partially parsed trace dict).
 Emit = Callable[[str, dict], None]
@@ -21,11 +24,11 @@ SYSTEM = """You answer the user's request and record the argument behind your an
 Today's date is {today}. Treat it as given; do not state it as a premise.
 
 How to build the trace:
-- premises: the facts your answer starts from. Prefer facts you can establish from a page you fetched with web_fetch. For those, set basis_kind "source", give the page URL, and copy a short quote from the fetched text exactly, character for character. The quote will be string-matched against the page, so never paraphrase inside it. Use basis_kind "memory" honestly when a fact comes from your own background knowledge.
+- premises: the facts your answer starts from. Prefer facts you can establish from a page you fetched with web_fetch. For those, set basis_kind "source", give the page URL, and copy a short quote from the fetched text exactly, character for character. The quote will be string-matched against the page, so never paraphrase inside it. Use basis_kind "source" only for a page you actually fetched with web_fetch in this conversation; a search result you did not fetch is not a source, so fetch it first if you want to cite it. Use basis_kind "memory" honestly when a fact comes from your own background knowledge.
 - claims: every conclusion you draw. List its grounds by id, and state the warrant: the specific rule that gets you from those grounds to the claim. A warrant must be specific enough that someone could dispute it. Pick the qualifier that matches the strength of the evidence, not the tone you want. List rebuttals: real conditions under which the claim would fail.
 - answer: your final answer to the user, one sentence per entry. Every sentence that asserts something factual must list the ids of the claims or premises it asserts. Do not put anything in the answer that the trace does not argue for.
 
-Search and fetch only as much as the request needs. For simple requests, a few premises and claims are enough."""
+Research: for any question about facts in the world, you must call web_search before answering, even when you are confident, because every fact from memory will be shown to the reader as unchecked. Search first, then fetch the one or two most authoritative pages and quote them, so the key facts in your answer rest on a source. Skip research only when the request is purely about reasoning, writing, or content the user supplied. Keep it lean: one search and one or two fetched pages are usually enough, and a few premises and claims suffice for a simple question."""
 
 PARTIAL_EVERY = 0.35  # seconds between partial-trace events
 
@@ -127,28 +130,30 @@ def build_trace(
     request: str,
     *,
     search: bool = True,
-    effort: str = "high",
+    effort: str = DRAFT_EFFORT,
     today: str | None = None,
     client: anthropic.Anthropic | None = None,
     on_event: Emit | None = None,
 ) -> TraceResult:
     emit = on_event or _noop
     today = today or dt.date.today().isoformat()
-    params = {"request": request, "search": search, "effort": effort, "today": today, "model": MODEL, "system": SYSTEM}
+    tools = (
+        [
+            # The basic tool versions: on a measured comparison they were ~40% faster and ~20% cheaper
+            # than the dynamic-filtering versions, which run several code-execution rounds per search.
+            {"type": "web_search_20250305", "name": "web_search", "max_uses": 2},
+            {"type": "web_fetch_20250910", "name": "web_fetch", "max_uses": 3, "max_content_tokens": 6000},
+        ]
+        if search
+        else []
+    )
+    params = {"request": request, "effort": effort, "today": today, "model": MODEL, "system": SYSTEM, "tools": tools}
     k = cache.key("trace", params)
     if (hit := cache.get(k)) is not None:
         emit("partial", hit["trace"])
         return TraceResult(Trace.model_validate(hit["trace"]), hit["documents"], hit["usage"], hit["model"])
 
     client = client or anthropic.Anthropic()
-    tools = (
-        [
-            {"type": "web_search_20260209", "name": "web_search", "max_uses": 5},
-            {"type": "web_fetch_20260209", "name": "web_fetch", "max_uses": 6},
-        ]
-        if search
-        else []
-    )
     msg, docs, usage = stream_structured(
         client,
         {

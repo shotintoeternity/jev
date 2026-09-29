@@ -40,7 +40,7 @@ def revise(
     trace: Trace,
     verdicts: list[Verdict],
     *,
-    effort: str = "medium",
+    effort: str = "low",  # mostly edits to an existing trace
     client: anthropic.Anthropic | None = None,
     on_event: Emit | None = None,
 ) -> tuple[Trace, dict]:

@@ -83,7 +83,7 @@ def main() -> None:
     ap = argparse.ArgumentParser(prog="jev", description="Answer a request with an epistemic trace, then check it with Jev.")
     ap.add_argument("request", nargs="*", help="the request (or read from stdin)")
     ap.add_argument("--no-search", action="store_true", help="answer from memory only")
-    ap.add_argument("--effort", default="high", choices=["low", "medium", "high", "xhigh", "max"])
+    ap.add_argument("--effort", default="medium", choices=["low", "medium", "high", "xhigh", "max"])
     ap.add_argument("--json", action="store_true", help="print the full report as JSON")
     ap.add_argument("--no-confirm", action="store_true", help="skip the revision step; show the checked first draft")
     a = ap.parse_args()
