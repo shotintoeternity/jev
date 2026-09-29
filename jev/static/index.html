@@ -139,6 +139,7 @@ const $ = id => document.getElementById(id);
 const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
 const levelOf = v => BAD.has(v.status) ? "bad" : (WARN.has(v.status) || v.needs_review) ? "warn" : "ok";
 const level = vs => vs.some(v => levelOf(v) === "bad") ? "bad" : vs.some(v => levelOf(v) === "warn") ? "warn" : "ok";
+const plural = (n, word) => `${n} ${word}${n === 1 ? "" : "s"}`;
 const host = u => { try { return new URL(u).hostname.replace(/^www\./, ""); } catch { return u; } };
 let report = null, byTarget = {}, nodes = {};
 
@@ -242,8 +243,8 @@ function render(r) {
           <span><b>${s.unverified_premises.length}</b> of ${s.premises} premises not checked against a source</span>
         </div>
         <div class="argument">
-          <details><summary>Full argument: ${t.claims.length} claims</summary>${t.claims.map(c => claimHTML(c, 2)).join("")}</details>
-          <details><summary>Evidence: ${t.premises.length} premises</summary>${t.premises.map(premiseHTML).join("")}</details>
+          <details><summary>Full argument: ${plural(t.claims.length, "claim")}</summary>${t.claims.map(c => claimHTML(c, 2)).join("")}</details>
+          <details><summary>Evidence: ${plural(t.premises.length, "premise")}</summary>${t.premises.map(premiseHTML).join("")}</details>
         </div>
         <p class="foot">Written by ${esc(m.claude_model)} in ${Math.round(m.trace_seconds)}s. Checked by ${esc((m.jev_models || []).join(", "))} in ${m.verify_seconds}s across ${m.jev_calls} questions.</p>
       </section>
