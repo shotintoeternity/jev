@@ -118,8 +118,17 @@ _DATE = re.compile(r"\b(20\d\d-\d\d-\d\d)\b")
 _NUM = re.compile(r"(?<![\w.])[-−]?\$?\d[\d,]*(?:\.\d+)?\s*(?:[kKmM]\b|million\b|thousand\b|bn\b|billion\b|%)?")
 
 
+_NOT_QUANTITIES = [
+    re.compile(r"\b\d{1,2}[-/]\d{1,2}(?:[-/]\d{2,4})?\b"),          # short dates: 09-15, 9/15, 9/15/26
+    re.compile(r"\b[A-Za-z]+[-_]?\d+[A-Za-z0-9_]*\b"),               # identifiers with digits: T-103, DE10Y, Q3, P2
+    re.compile(r"\b\d+[A-Za-z_]+[A-Za-z0-9_]*\b(?<![kKmM])"),        # 10Y, 2nd (but not 904k, 2M)
+]
+
+
 def _numbers(text: str) -> list[float]:
     text = _DATE.sub(" ", text)
+    for pat in _NOT_QUANTITIES:
+        text = pat.sub(" ", text)
     out = []
     for m in _NUM.finditer(text):
         tok = m.group().replace("−", "-").replace("$", "").replace(",", "").strip()
