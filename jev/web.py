@@ -23,6 +23,23 @@ load_dotenv()
 DB_PATH = os.environ.get("POCKETNOOK_SQLITE_PATH", str(Path(__file__).resolve().parent.parent / "jev.db"))
 STATIC = Path(__file__).parent / "static"
 MAX_RUNNING = 3  # each run spends real money on Claude
+REQUIRED_KEYS = ("ANTHROPIC_API_KEY", "TYPESAFE_API_KEY")
+
+
+def key_status() -> dict[str, str]:
+    """Which API keys this process can see. Names and lengths only, never values."""
+    out = {}
+    for name in REQUIRED_KEYS:
+        raw = os.environ.get(name)
+        if raw is None:
+            out[name] = "missing"
+        elif not raw.strip():
+            out[name] = "empty"
+        elif raw != raw.strip() or raw.strip()[0] in "'\"" or "=" in raw:
+            out[name] = f"set ({len(raw)} chars) but has stray spaces, quotes or '='"
+        else:
+            out[name] = f"set ({len(raw)} chars)"
+    return out
 
 app = FastAPI(title="jev")
 _lock = threading.Lock()
@@ -59,8 +76,17 @@ def _work(job_id: str, body: CheckIn) -> None:
             conn.execute("update jobs set status='error', error=?, finished=? where id=?", (f"{type(e).__name__}: {e}", time.time(), job_id))
 
 
+@app.get("/api/health")
+def health():
+    keys = key_status()
+    return {"ok": all(v.startswith("set (") and "stray" not in v for v in keys.values()), "keys": keys}
+
+
 @app.post("/api/check")
 def check(body: CheckIn):
+    missing = [k for k, v in key_status().items() if not v.startswith("set (")]
+    if missing:
+        raise HTTPException(503, f"The server is missing {', '.join(missing)}. Add it as a secret and redeploy.")
     text = body.request.strip()
     if not text or len(text) > 4000:
         raise HTTPException(400, "Request must be 1 to 4000 characters.")
