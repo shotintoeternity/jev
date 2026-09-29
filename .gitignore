@@ -5,3 +5,5 @@ traces/
 .cache/
 jev.db
 docs/typesafe/
+evals/data/*.csv
+evals/data/calibration_results.jsonl
