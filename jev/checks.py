@@ -13,6 +13,7 @@ NEAR_MISS = 0.8  # share of the quote that must match contiguously to count as a
 
 def normalize(text: str) -> str:
     """Fold curly quotes/dashes and collapse whitespace, so quotes match across line wraps."""
+    text = re.sub(r"\\[ntr]", " ", text)  # quotes sometimes carry a literal "\n" for a line break
     return re.sub(r"\s+", " ", text.translate(_QUOTES)).strip()
 
 
