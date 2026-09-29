@@ -1,0 +1,6 @@
+.env
+.venv/
+__pycache__/
+traces/
+.cache/
+jev.db

@@ -1,0 +1,144 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>jev · epistemic check</title>
+<style>
+:root {
+  --bg: #fbfaf7; --panel: #ffffff; --ink: #1d1b18; --muted: #6b665e; --line: #e4e0d8;
+  --good: #2f7d4f; --good-bg: #e8f3ec; --warn: #9a6b00; --warn-bg: #fbf1d9;
+  --bad: #b3261e; --bad-bg: #fbe6e4; --accent: #3b5bdb;
+  --mono: ui-monospace, "SF Mono", Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #161513; --panel: #1f1d1a; --ink: #ece8e1; --muted: #9c968c; --line: #33302b;
+    --good: #6fcf97; --good-bg: #1c2b22; --warn: #e6b450; --warn-bg: #2d2615;
+    --bad: #f28b82; --bad-bg: #331c1a; --accent: #8ea4ff;
+  }
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--ink); font: 16px/1.55 system-ui, -apple-system, sans-serif; }
+main { max-width: 860px; margin: 0 auto; padding: 32px 16px 80px; }
+h1 { font-size: 22px; margin: 0 0 4px; letter-spacing: -0.01em; }
+.sub { color: var(--muted); margin: 0 0 24px; font-size: 14px; }
+form { display: flex; flex-direction: column; gap: 10px; }
+textarea { width: 100%; min-height: 84px; padding: 12px; font: inherit; color: var(--ink); background: var(--panel);
+  border: 1px solid var(--line); border-radius: 8px; resize: vertical; }
+.row { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+button { font: inherit; padding: 8px 18px; border-radius: 8px; border: 0; background: var(--accent); color: #fff; cursor: pointer; }
+button:disabled { opacity: .5; cursor: default; }
+label.opt { color: var(--muted); font-size: 14px; display: flex; gap: 6px; align-items: center; }
+#status { color: var(--muted); font-size: 14px; }
+section { margin-top: 28px; }
+h2 { font-size: 13px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); margin: 0 0 10px; }
+.answer { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 16px 18px; font-size: 17px; }
+.s { border-radius: 4px; padding: 1px 2px; cursor: help; }
+.s.good { background: transparent; }
+.s.warn { background: var(--warn-bg); }
+.s.bad { background: var(--bad-bg); text-decoration: underline wavy var(--bad); text-underline-offset: 4px; }
+.stats { display: flex; gap: 18px; flex-wrap: wrap; font-size: 14px; color: var(--muted); margin-top: 10px; }
+.stats b { color: var(--ink); }
+.item { background: var(--panel); border: 1px solid var(--line); border-left: 4px solid var(--good); border-radius: 8px;
+  padding: 10px 14px; margin-bottom: 8px; }
+.item.warn { border-left-color: var(--warn); } .item.bad { border-left-color: var(--bad); }
+.item .head { display: flex; gap: 8px; align-items: baseline; }
+.id { font-family: var(--mono); font-size: 12px; color: var(--muted); min-width: 26px; }
+.meta { font-size: 13px; color: var(--muted); margin-top: 4px; overflow-wrap: anywhere; }
+.meta a { color: var(--accent); }
+.tags { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 6px; }
+.tag { font-family: var(--mono); font-size: 12px; padding: 1px 7px; border-radius: 999px; background: var(--good-bg); color: var(--good); }
+.tag.warn { background: var(--warn-bg); color: var(--warn); } .tag.bad { background: var(--bad-bg); color: var(--bad); }
+.legend { font-size: 13px; color: var(--muted); display: flex; gap: 14px; flex-wrap: wrap; margin-top: 8px; }
+.err { color: var(--bad); }
+</style>
+</head>
+<body>
+<main>
+  <h1>jev</h1>
+  <p class="sub">Claude answers and records its argument (Toulmin model). Jev checks every link: does the source say it, does the conclusion follow, is the confidence earned, is anything in the answer unargued.</p>
+  <form id="f">
+    <textarea id="q" placeholder="Ask anything…" required maxlength="4000"></textarea>
+    <div class="row">
+      <button id="go">Check</button>
+      <label class="opt"><input type="checkbox" id="search" checked> use web sources</label>
+      <span id="status"></span>
+    </div>
+  </form>
+  <div id="out"></div>
+</main>
+<script>
+const BAD = new Set(["contradicted","unsupported","fabricated","non_sequitur","tainted","untraced"]);
+const WARN = new Set(["unverified","weak","overclaimed"]);
+const level = vs => vs.some(v => BAD.has(v.status)) ? "bad" : vs.some(v => WARN.has(v.status) || v.needs_review) ? "warn" : "good";
+const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const $ = id => document.getElementById(id);
+
+function tags(vs) {
+  return `<div class="tags">${vs.map(v => {
+    const lv = BAD.has(v.status) ? "bad" : (WARN.has(v.status) || v.needs_review) ? "warn" : "good";
+    const conf = v.confidence != null ? ` ${v.confidence.toFixed(2)}` : "";
+    return `<span class="tag ${lv}" title="${esc(v.note)}">${esc(v.check)}: ${esc(v.status)}${conf}</span>`;
+  }).join("")}</div>${vs.filter(v => v.note).map(v => `<div class="meta">${esc(v.note)}</div>`).join("")}`;
+}
+
+function render(r) {
+  const by = {};
+  for (const v of r.verdicts) (by[v.target] ??= []).push(v);
+  const s = r.summary, m = r.meta, t = r.trace;
+  const answer = t.answer.map((a, i) => {
+    const vs = by[`S${i+1}`] ?? [];
+    const tip = [a.claim_ids.join(", ") || "no claims cited", ...vs.map(v => `${v.check}: ${v.status}${v.note ? " – " + v.note : ""}`)].join("\n");
+    return `<span class="s ${level(vs)}" title="${esc(tip)}">${esc(a.text)}</span>`;
+  }).join(" ");
+  const premises = t.premises.map(p => {
+    const vs = by[p.id] ?? [];
+    const src = p.source_url ? `<div class="meta"><a href="${esc(p.source_url)}" target="_blank" rel="noreferrer">${esc(p.source_url)}</a>${p.quote ? ` – “${esc(p.quote)}”` : ""}</div>` : "";
+    return `<div class="item ${level(vs)}"><div class="head"><span class="id">${p.id}</span><span>${esc(p.statement)}</span></div>
+      <div class="meta">basis: ${esc(p.basis_kind)} · falsified by: ${esc(p.falsifiable_by)}</div>${src}${tags(vs)}</div>`;
+  }).join("");
+  const claims = t.claims.map(c => {
+    const vs = by[c.id] ?? [];
+    return `<div class="item ${level(vs)}"><div class="head"><span class="id">${c.id}</span><span><i>${esc(c.qualifier)}</i> ${esc(c.claim)}</span></div>
+      <div class="meta">grounds: ${esc(c.grounds.join(", "))} · warrant: ${esc(c.warrant)}</div>
+      ${c.backing ? `<div class="meta">backing: ${esc(c.backing)}</div>` : ""}
+      ${c.rebuttals.length ? `<div class="meta">unless: ${esc(c.rebuttals.join("; "))}</div>` : ""}${tags(vs)}</div>`;
+  }).join("");
+  $("out").innerHTML = `
+    <section><h2>Answer</h2><div class="answer">${answer}</div>
+      <div class="legend"><span><span class="s bad">underlined</span> = a check failed</span><span><span class="s warn">shaded</span> = unverified or uncertain</span><span>hover a sentence for details</span></div>
+      <div class="stats"><span><b>${s.sentences - s.flagged_sentences.length}/${s.sentences}</b> sentences clean</span>
+        <span><b>${s.problems}</b> problems</span><span><b>${s.unverified_premises.length}</b> unverified premises</span>
+        <span><b>${s.needs_review}</b> low-confidence</span>
+        <span>claude ${m.trace_seconds}s · jev ${m.verify_seconds}s (${m.jev_calls} calls)</span></div></section>
+    <section><h2>Premises</h2>${premises}</section>
+    <section><h2>Claims</h2>${claims}</section>`;
+}
+
+async function poll(id) {
+  const r = await (await fetch(`/api/jobs/${id}`)).json();
+  if (r.status === "running") {
+    $("status").textContent = `Claude is researching and building the trace… ${Math.round(r.elapsed)}s`;
+    return setTimeout(() => poll(id), 2000);
+  }
+  $("go").disabled = false;
+  if (r.status === "error") { $("status").innerHTML = `<span class="err">${esc(r.error)}</span>`; return; }
+  $("status").textContent = `Done in ${Math.round(r.elapsed)}s`;
+  history.replaceState(null, "", `#${id}`);
+  render(r.report);
+}
+
+$("f").addEventListener("submit", async e => {
+  e.preventDefault();
+  $("go").disabled = true; $("out").innerHTML = ""; $("status").textContent = "Starting…";
+  const res = await fetch("/api/check", {method: "POST", headers: {"Content-Type": "application/json"},
+    body: JSON.stringify({request: $("q").value, search: $("search").checked})});
+  const body = await res.json();
+  if (!res.ok) { $("go").disabled = false; $("status").innerHTML = `<span class="err">${esc(body.detail)}</span>`; return; }
+  poll(body.id);
+});
+if (location.hash.length > 1) { $("go").disabled = true; poll(location.hash.slice(1)); }
+</script>
+</body>
+</html>

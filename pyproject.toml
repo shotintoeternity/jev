@@ -1,0 +1,27 @@
+[project]
+name = "jev"
+version = "0.1.0"
+description = "Epistemic trace + Jev hallucination check"
+readme = "README.md"
+requires-python = ">=3.13"
+dependencies = [
+    "anthropic>=1.9.0",
+    "fastapi>=0.142.0",
+    "pydantic>=2.13.5",
+    "python-dotenv>=1.2.3",
+    "typesafe-sdk>=0.7.2",
+    "uvicorn>=0.54.0",
+]
+
+[project.scripts]
+jev = "jev.__main__:main"
+jev-web = "jev.web:serve"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[dependency-groups]
+dev = [
+    "pytest>=9.1.1",
+]
