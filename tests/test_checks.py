@@ -111,3 +111,17 @@ def test_dates_with_commas_are_not_merged():
 def test_literal_backslash_n_in_quote_matches_a_line_break():
     doc = "Nobel Prize in Physics 1903\nNobel Prize in Chemistry 1911"
     assert checks.locate_quote("Nobel Prize in Physics 1903\\nNobel Prize in Chemistry 1911", doc)[0] == "found"
+
+
+def test_year_outside_passage_but_on_page_is_fine():
+    from jev.verify import verify
+    from jev.schema import AnswerSentence, Premise, Trace
+    doc = "Published July 2026. " + "x " * 800 + "Up to 400 mg of caffeine a day is generally safe for most adults."
+    t = Trace(
+        premises=[Premise(id="P1", statement="A July 2026 statement says up to 400 mg a day is safe.", basis_kind="source",
+                          source_url="https://a.org/x", quote="Up to 400 mg of caffeine a day is generally safe", falsifiable_by="-")],
+        claims=[], answer=[AnswerSentence(text="Up to 400 mg is safe.", claim_ids=["P1"])],
+    )
+    from jev import checks
+    _, passage = checks.locate_quote(t.premises[0].quote, doc)
+    assert "2026" in checks.missing_numbers(t.premises[0].statement, passage)  # the passage alone lacks the year

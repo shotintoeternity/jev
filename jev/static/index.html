@@ -126,6 +126,32 @@ kbd { font: inherit; border: 1px solid var(--rule); border-bottom-width: 2px; bo
 .linkbtn { font: inherit; background: none; border: 0; padding: 0; color: var(--accent); cursor: pointer; text-decoration: underline; text-underline-offset: 3px; }
 .viewing-draft .answer { color: var(--slate); }
 
+.beliefs { margin-top: 36px; }
+.beliefs h2 { font: 600 13px/1.3 var(--sans); color: var(--slate); margin: 0 0 6px; }
+.beliefs > .hint { color: var(--slate); font-size: 13px; margin: 0 0 14px; }
+.belief { padding: 16px 0; border-top: 1px solid var(--rule); }
+.belief-head { display: flex; gap: 10px; align-items: baseline; }
+.belief-claim { font: 400 16px/1.5 var(--serif); }
+.meter { display: flex; align-items: center; gap: 12px; margin: 10px 0 0 32px; }
+.meter-track { position: relative; flex: 1; max-width: 360px; height: 8px; border-radius: 4px; background: var(--rule); }
+.meter-fill { height: 100%; border-radius: 4px; }
+.meter-fill.ok { background: var(--ok); } .meter-fill.warn { background: var(--warn); } .meter-fill.bad { background: var(--bad); }
+.meter-prior { position: absolute; top: -4px; width: 2px; height: 16px; margin-left: -1px; background: var(--ink); opacity: .6; }
+.meter-num { font-weight: 600; font-variant-numeric: tabular-nums; min-width: 3ch; }
+.belief-change, .crux { font-size: 13px; color: var(--slate); margin: 8px 0 0 32px; }
+.crux b { color: var(--ink); font-weight: 600; }
+.crux i { font-style: normal; color: var(--ink); }
+.ledger { list-style: none; margin: 10px 0 0 32px; padding: 0; }
+.ev { display: grid; grid-template-columns: 88px 1fr; gap: 10px; padding: 8px 0; border-top: 1px dashed var(--rule); font-size: 13px; color: var(--slate); }
+.ev q { font-family: var(--serif); font-size: 14px; color: var(--ink); }
+.ev a { color: var(--accent); }
+.ev-dir { font-size: 12px; font-weight: 600; }
+.ev.ok .ev-dir { color: var(--ok); } .ev.bad .ev-dir { color: var(--bad); } .ev.quiet .ev-dir, .ev.none .ev-dir { color: var(--faint); }
+.ev.none { opacity: .75; }
+.ev-move { color: var(--ink); }
+.notes .belief { border-top: 0; padding-top: 4px; }
+.notes .meter, .notes .belief-change, .notes .crux { margin-left: 0; }
+.honesty { font-size: 12px; color: var(--faint); margin: 12px 0 0; }
 .argument { margin-top: 36px; }
 .argument details { border-top: 1px solid var(--rule); }
 .argument details:last-child { border-bottom: 1px solid var(--rule); }
@@ -233,27 +259,36 @@ function absorb(v) {
       live.fix = e.problems;
     }
     if (e.kind === "skipped") { live.done.add("confirming"); live.skipped = true; live.notes.confirming = `Not needed: ${e.reason}`; }
+    if (e.stage === "confirming") live.revising = true;
+    if (e.kind === "priors") live.notes.weighing = `Asked Claude how sure it was before looking: ${plural(e.n, "claim")}`;
+    if (e.kind === "scoring") live.notes.weighing = `Jev is scoring ${plural(e.passages, "passage")} for and against`;
+    if (e.kind === "done" && e.stage === "confirming") live.done.add("confirming");
   }
   if (live.stage !== "drafting") live.done.add("drafting");
-  if (live.stage === "confirming") { live.done.add("verifying"); if (!live.notes.confirming && !live.skipped) live.notes.confirming = `Rewriting the answer to fix ${plural(live.fix || 0, "problem")}`; }
+  if (live.stage === "confirming") { live.revising = true; live.done.add("verifying"); if (!live.notes.confirming && !live.skipped) live.notes.confirming = `Rewriting the answer to fix ${plural(live.fix || 0, "problem")}`; }
+  if (live.stage === "weighing") { live.done.add("verifying"); live.done.add("confirming"); if (!live.notes.weighing) live.notes.weighing = "Looking for evidence against each claim"; }
 }
 
-const STAGES = [["drafting", "Drafting"], ["verifying", "Verifying with Jev"], ["confirming", "Revising the answer"]];
+const ALL_STAGES = [["drafting", "Drafting"], ["verifying", "Checking with Jev"], ["confirming", "Revising the answer"], ["weighing", "Weighing the evidence"]];
+const stages = () => ALL_STAGES.filter(([k]) => k !== "confirming" || live.revising);
 
 function answerText(partial) {
   return (partial?.answer || []).map(a => a?.text || "").filter(Boolean).join(" ");
 }
 
 function renderProgress(elapsed) {
+  const STAGES = stages();
   const idx = STAGES.findIndex(([k]) => k === live.stage);
   const draft = live.partial.drafting || {};
   const counts = [draft.premises?.length && plural(draft.premises.length, "premise"), draft.claims?.length && plural(draft.claims.length, "claim")].filter(Boolean);
-  const acts = live.log.filter(e => e.stage === "drafting" && (e.kind === "search" || e.kind === "read")).map(e =>
+  const actsFor = stage => live.log.filter(e => e.stage === stage && (e.kind === "search" || e.kind === "read")).map(e =>
     e.kind === "search" ? `<li>Searched for “${esc(e.query)}”</li>` : `<li class="${e.ok ? "" : "failed"}">Read ${esc(host(e.url))}</li>`).join("");
+  const acts = actsFor("drafting"), counter = actsFor("weighing");
   const body = {
     drafting: `${acts ? `<ul class="activity">${acts}</ul>` : ""}${counts.length ? `<ul class="activity"><li>Recorded ${counts.join(" and ")}</li></ul>` : ""}${answerText(draft) ? `<p class="preview">${esc(answerText(draft))}</p>` : ""}`,
     verifying: "",
     confirming: answerText(live.partial.confirming) ? `<p class="preview">${esc(answerText(live.partial.confirming))}</p>` : "",
+    weighing: counter ? `<ul class="activity">${counter}</ul>` : "",
   };
   const note = { drafting: `${Math.round(elapsed)}s`, ...live.notes };
   $("out").innerHTML = `<section class="progress" aria-label="Progress"><ol class="stages">${STAGES.map(([k, name], i) => {
@@ -289,12 +324,54 @@ function claimHTML(c, depth = 0) {
     ${chips(vs)}${grounds ? `<div class="nested">${grounds}</div>` : ""}</div>`;
 }
 
+const TIER = { primary: "official or primary source", scholarly: "scholarly source", reference: "reference work", press: "news source", informal: "informal source" };
+
+function beliefFor(id) { return (finalReport?.meta?.beliefs || []).find(b => b.id === id); }
+
+function pct(p) { return `${Math.round(p * 100)}%`; }
+
+function evidenceHTML(e) {
+  const link = `<a href="${esc(e.url)}" target="_blank" rel="noreferrer">${esc(host(e.url))}</a>`;
+  if (e.stance == null) {
+    const why = e.found === "missing" ? "quote not found on the page" : "page could not be read";
+    return `<li class="ev none"><span class="ev-dir">not counted</span><div>${link}: ${why}. <q>${esc(e.quote)}</q></div></li>`;
+  }
+  const dir = e.stance === "supports" ? ["for", "ok"] : e.stance === "contradicts" ? ["against", "bad"] : ["says nothing", "quiet"];
+  const move = e.stance !== "silent" && Math.abs(e.shift) >= 0.15 ? ` <span class="ev-move">${e.shift > 0 ? "raised" : "lowered"} the estimate</span>` : "";
+  const origin = e.origin === "contrary" ? "found when looking for counter-evidence" : "used in the answer";
+  return `<li class="ev ${dir[1]}"><span class="ev-dir">${dir[0]}</span><div>${link}, ${TIER[e.tier] || e.tier}, ${origin}.${move}<br><q>${esc(e.quote.replace(/\\n/g, " "))}</q></div></li>`;
+}
+
+function beliefHTML(b, compact = false) {
+  const lv = b.posterior >= 0.8 ? "ok" : b.posterior >= 0.4 ? "warn" : "bad";
+  const moved = Math.round((b.posterior - b.prior) * 100);
+  const change = b.checked === 0 ? "Nothing was checked against a source, so this is Claude's memory only."
+    : `Before looking anything up, Claude put it at ${pct(b.prior)}. ${plural(b.checked, "passage")} ${Math.abs(moved) < 3 ? "left that about where it was" : moved > 0 ? `raised it to ${pct(b.posterior)}` : `lowered it to ${pct(b.posterior)}`}.`;
+  const crux = b.crux ? `<p class="crux"><b>Crux:</b> ${esc(b.crux.note)} ${nodes[b.crux.id] ? `<i>${esc(nodes[b.crux.id].statement || nodes[b.crux.id].claim)}</i>` : ""}</p>` : "";
+  const ev = compact ? "" : `<ul class="ledger">${b.evidence.map(evidenceHTML).join("") || `<li class="ev none">No sources.</li>`}</ul>`;
+  return `<div class="belief"><div class="belief-head"><span class="node-id">${b.id}</span><span class="belief-claim">${esc(b.claim)}</span></div>
+    <div class="meter" role="img" aria-label="Estimated ${pct(b.posterior)} likely true; ${pct(b.prior)} before research">
+      <div class="meter-track"><div class="meter-fill ${lv}" style="width:${b.posterior * 100}%"></div><div class="meter-prior" style="left:${b.prior * 100}%" title="Before research"></div></div>
+      <span class="meter-num">${pct(b.posterior)}</span></div>
+    <p class="belief-change">${change}</p>${crux}${ev}</div>`;
+}
+
+function beliefsHTML() {
+  const bs = finalReport?.meta?.beliefs || [];
+  if (!bs.length || showingDraft) return "";
+  return `<section class="beliefs" aria-label="How sure, and why"><h2>How sure, and why</h2>
+    <p class="hint">Each claim's estimate combines what Claude believed before looking with every passage found for or against it. The marker on each bar is where Claude started.</p>
+    ${bs.map(b => beliefHTML(b)).join("")}
+    <p class="honesty">These estimates are not Claude's hidden reasoning. They show what the answer depends on: the evidence found, how it moved the estimate, and the one premise each claim cannot do without. The weights are not yet fitted to real outcomes, so treat the numbers as estimates.</p></section>`;
+}
+
 function showNotes(i) {
   document.querySelectorAll(".s").forEach(el => el.classList.toggle("sel", Number(el.dataset.i) === i));
   const s = report.trace.answer[i];
   const vs = byTarget[`S${i + 1}`] ?? [];
   const cited = s.claim_ids.map(id => nodes[id]).filter(Boolean);
   $("notes").innerHTML = `<h2>Why this sentence</h2><p class="quoted">${esc(s.text)}</p>${chips(vs)}
+    ${cited.map(n => beliefFor(n.id)).filter(Boolean).map(b => beliefHTML(b, true)).join("")}
     ${cited.length ? cited.map(n => n.claim ? claimHTML(n) : premiseHTML(n)).join("") : `<p class="hint">This sentence doesn't cite any part of the argument.</p>`}`;
 }
 
@@ -325,7 +402,12 @@ function stanceHTML() {
 
 function outcomeHTML() {
   const r = finalReport, d = r.draft;
-  if (!d) return `<div class="outcome"><span><b>Checked.</b> Jev found no problems in the first draft, so it stands as the final answer.</span></div>`;
+  if (!d) {
+    const s = r.summary, n = s.flagged_sentences.length;
+    return n
+      ? `<div class="outcome"><span><b>Checked.</b> Jev flagged ${plural(n, "sentence")} of ${s.sentences} that say more than the evidence shows. They are underlined below.</span></div>`
+      : `<div class="outcome"><span><b>Checked.</b> Every sentence is backed by the recorded argument.</span></div>`;
+  }
   const line = showingDraft
     ? `<span><b>First draft.</b> Jev found ${plural(d.summary.problems, "problem")} in ${d.summary.flagged_sentences.length} of ${plural(d.summary.sentences, "sentence")}.</span>`
     : `<span><b>Revised after checking.</b> Jev found ${plural(d.summary.problems, "problem")} in the first draft; the final answer has ${r.summary.problems}.</span>`;
@@ -357,11 +439,12 @@ function paint(r) {
           <span><span class="dot bad"></span><b>${counts.bad}</b> not supported</span>
           <span><b>${s.unverified_premises.length}</b> of ${s.premises} premises not checked against a source</span>
         </div>
+        ${beliefsHTML()}
         <div class="argument">
           <details><summary>Full argument: ${plural(t.claims.length, "claim")}</summary>${t.claims.map(c => claimHTML(c, 2)).join("")}</details>
           <details><summary>Evidence: ${plural(t.premises.length, "premise")}</summary>${t.premises.map(premiseHTML).join("")}</details>
         </div>
-        <p class="foot">Drafted by ${esc(m.claude_model)} in ${Math.round(m.trace_seconds)}s.${revised} Checked by ${esc((m.jev_models || []).join(", "))} in ${m.verify_seconds}s across ${m.jev_calls} questions.</p>
+        <p class="foot">Drafted by ${esc(m.claude_model)} in ${Math.round(m.trace_seconds)}s.${revised} Checked by ${esc((m.jev_models || []).join(", "))} in ${m.verify_seconds}s across ${m.jev_calls} questions.${m.weigh_seconds != null ? ` Evidence weighed in ${Math.round(m.weigh_seconds)}s.` : ""}</p>
       </section>
       <aside class="notes" id="notes" aria-live="polite">
         <h2>Why this sentence</h2>

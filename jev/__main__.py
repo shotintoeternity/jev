@@ -58,6 +58,17 @@ def render(r: Report) -> str:
         d = r.draft.summary
         lines += ["", f"REVISED: first draft had {d['problems']} problems in {len(d['flagged_sentences'])}/{d['sentences']} sentences; "
                   f"the revision has {s['problems']} in {len(s['flagged_sentences'])}/{s['sentences']}"]
+    if m.get("beliefs"):
+        lines += ["", "HOW SURE (estimates; weights not yet fitted)"]
+        for b in m["beliefs"]:
+            lines.append(f"  {b['id']} {b['posterior']:.0%} (before research {b['prior']:.0%}, {b['checked']} passages weighed) {b['claim'][:110]}")
+            for e in b["evidence"]:
+                if "stance" in e:
+                    lines.append(f"      {e['shift']:+.2f} {e['stance']:11} {e['tier']:9} {e['origin']:8} {e['url'][:70]}")
+                else:
+                    lines.append(f"      ----- {e['found']:11} {'':9} {e['origin']:8} {e['url'][:70]}")
+            if b["crux"]:
+                lines.append(f"      crux: {b['crux']['note']}")
     lines += [
         "",
         f"{s['sentences'] - len(s['flagged_sentences'])}/{s['sentences']} answer sentences clean; "
@@ -77,6 +88,10 @@ def _progress(stage: str, kind: str, payload: dict) -> None:
         print(f"  [{stage}] checking {payload['checks']} links with Jev", file=sys.stderr)
     elif kind == "done" and stage == "verifying":
         print(f"  [verifying] {payload['problems']} problems", file=sys.stderr)
+    elif kind == "priors":
+        print(f"  [weighing] prior probabilities for {payload['n']} claims", file=sys.stderr)
+    elif kind == "scoring":
+        print(f"  [weighing] scoring {payload['passages']} passages", file=sys.stderr)
     elif kind == "skipped":
         print(f"  [confirming] skipped: {payload['reason']}", file=sys.stderr)
 
@@ -88,10 +103,10 @@ def main() -> None:
     ap.add_argument("--no-search", action="store_true", help="answer from memory only")
     ap.add_argument("--effort", default="medium", choices=["low", "medium", "high", "xhigh", "max"])
     ap.add_argument("--json", action="store_true", help="print the full report as JSON")
-    ap.add_argument("--no-confirm", action="store_true", help="skip the revision step; show the checked first draft")
+    ap.add_argument("--revise", action="store_true", help="if checks fail, have Claude revise the answer and check it again")
     a = ap.parse_args()
     request = " ".join(a.request) or sys.stdin.read()
-    report = run(request.strip(), search=not a.no_search, effort=a.effort, confirm=not a.no_confirm, on_event=_progress)
+    report = run(request.strip(), search=not a.no_search, effort=a.effort, confirm=a.revise, on_event=_progress)
     print(report.model_dump_json(indent=1) if a.json else render(report))
 
 

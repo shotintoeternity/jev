@@ -2,7 +2,10 @@
 
     drafting    Claude answers with a Toulmin trace, researching as needed (streamed)
     verifying   code and Jev check every link of the draft
-    confirming  if anything failed, Claude revises from the findings (streamed), and Jev checks the revision
+    confirming  optional, off by default: if anything failed, Claude revises from the findings, and Jev
+                checks the revision (it optimizes for passing checks, not for truth)
+    weighing    for each claim: Claude's prior, evidence for and against, Jev stance and source tier,
+                a combined probability, and the crux
 """
 
 import datetime as dt
@@ -13,6 +16,7 @@ from pathlib import Path
 
 from pydantic import BaseModel
 
+from .belief import weigh
 from .revise import revise
 from .schema import BAD, Trace, Verdict
 from .trace import build_trace
@@ -70,7 +74,7 @@ def run(
     *,
     search: bool = True,
     effort: str = "medium",
-    confirm: bool = True,
+    confirm: bool = False,
     save: bool = True,
     on_event: Progress | None = None,
 ) -> Report:
@@ -96,8 +100,8 @@ def run(
     }
     needs_fix = any(v.status in TRIGGERS_REVISION for v in verdicts)
     if not (confirm and needs_fix):
-        if on_event:
-            on_event("confirming", "skipped", {"reason": "no problems found" if not needs_fix else "turned off"})
+        if on_event and confirm:
+            on_event("confirming", "skipped", {"reason": "no problems found"})
         report = Report(request=request, trace=tr.trace, verdicts=verdicts, meta=meta)
     else:
         revised, rusage = revise(request, tr.trace, verdicts, on_event=emitter("confirming"))
@@ -117,9 +121,16 @@ def run(
             meta=meta,
             draft=Stage(trace=tr.trace, verdicts=verdicts, summary=draft_summary),
         )
+    if on_event and report.draft:
+        on_event("confirming", "done", report.summary())
+    t5 = time.time()
+    beliefs, bmeta = weigh(request, report.trace, tr.documents, today=dt.date.today().isoformat(), on_event=emitter("weighing"))
+    report.meta["beliefs"] = beliefs
+    report.meta["weigh_seconds"] = round(time.time() - t5, 2)
+    report.meta |= bmeta
     report.meta["stance"] = stance(request, report.trace.answer_text())
     if on_event:
-        on_event("confirming", "done", report.summary())
+        on_event("weighing", "done", {"claims": len(beliefs)})
 
     if save:
         TRACES_DIR.mkdir(exist_ok=True)

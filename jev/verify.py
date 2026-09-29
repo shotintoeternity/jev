@@ -3,7 +3,7 @@
 import asyncio
 import os
 
-from typesafe_sdk import AsyncTypeSafeClient, Choice, Noul, Score
+from typesafe_sdk import AsyncTypeSafeClient, Choice, Noul, Score, TypeSafeAPITimeoutError
 
 from . import cache, checks
 from .schema import QUALIFIERS, Trace, Verdict
@@ -12,6 +12,11 @@ JEV_MODEL = os.environ.get("JEV_MODEL", "jev-latest")
 REVIEW_BELOW = 0.6  # confidence under which a verdict is sent to review; tune with evals/
 YES = 0.5
 CONCURRENCY = 16
+JEV_TIMEOUT = 30.0  # the SDK default of 10 s is too tight when many calls run at once
+
+
+def jev_client() -> AsyncTypeSafeClient:
+    return AsyncTypeSafeClient(model=JEV_MODEL, timeout=JEV_TIMEOUT)
 
 # ---- question wording (iterate on these with evals/) ---------------------
 
@@ -99,7 +104,7 @@ STANCE = Choice(
 
 async def stance_async(request: str, answer: str) -> dict:
     """Is the request a statement, and does the final answer agree with it?"""
-    async with AsyncTypeSafeClient(model=JEV_MODEL) as client:
+    async with jev_client() as client:
         res = await _ask(client, asyncio.Semaphore(1), {"request": request, "answer": answer}, {"kind": REQUEST_KIND, "stance": STANCE})
     a = res["answers"]
     return {
@@ -124,7 +129,10 @@ async def _ask(client: AsyncTypeSafeClient, sem: asyncio.Semaphore, state: dict,
     if (hit := cache.get(k)) is not None:
         return hit
     async with sem:
-        r = await client.system_one(state, questions)
+        try:
+            r = await client.system_one(state, questions)
+        except TypeSafeAPITimeoutError:
+            r = await client.system_one(state, questions)  # one retry
     out = {"model": r.model, "answers": {name: a.model_dump() for name, a in r.answers.items()}}
     cache.put(k, out)
     return out
@@ -152,7 +160,9 @@ async def verify_async(trace: Trace, documents: dict[str, str], on_event=None) -
         if found == "near_miss":
             verdicts.append(Verdict(target=p.id, check="quote", status="ok", note="quote is close but not verbatim"))
         passages[p.id] = passage
-        if missing := checks.missing_numbers(p.statement, passage):
+        # Years are often page metadata (a publication date) outside the quoted passage: check them against the whole page.
+        missing = [n for n in checks.missing_numbers(p.statement, passage) if not (len(n) == 4 and n.isdigit() and 1900 <= int(n) <= 2100 and n in doc)]
+        if missing:
             verdicts.append(Verdict(target=p.id, check="numbers", status="unsupported", note=f"numbers not in the source passage: {', '.join(missing)}"))
         jobs.append((f"src:{p.id}", {"passage": passage, "statement": p.statement}, {"rel": SOURCE_RELATION}))
 
@@ -179,7 +189,7 @@ async def verify_async(trace: Trace, documents: dict[str, str], on_event=None) -
     if on_event:
         on_event("checking", {"checks": len(jobs) + len(verdicts)})
     sem = asyncio.Semaphore(CONCURRENCY)
-    async with AsyncTypeSafeClient(model=JEV_MODEL) as client:
+    async with jev_client() as client:
         results = await asyncio.gather(*(_ask(client, sem, st, qs) for _, st, qs in jobs))
 
     claims = {c.id: c for c in trace.claims}
