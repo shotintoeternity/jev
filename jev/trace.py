@@ -1,0 +1,103 @@
+"""Stage 1: Claude answers the request and records a Toulmin trace, citing pages it fetched."""
+
+import datetime as dt
+from dataclasses import dataclass, field
+
+import anthropic
+
+from . import cache
+from .schema import Trace
+
+MODEL = "claude-opus-5-5"
+
+SYSTEM = """You answer the user's request and record the argument behind your answer as an epistemic trace.
+
+Today's date is {today}. Treat it as given; do not state it as a premise.
+
+How to build the trace:
+- premises: the facts your answer starts from. Prefer facts you can establish from a page you fetched with web_fetch. For those, set basis_kind "source", give the page URL, and copy a short quote from the fetched text exactly, character for character. The quote will be string-matched against the page, so never paraphrase inside it. Use basis_kind "memory" honestly when a fact comes from your own background knowledge.
+- claims: every conclusion you draw. List its grounds by id, and state the warrant: the specific rule that gets you from those grounds to the claim. A warrant must be specific enough that someone could dispute it. Pick the qualifier that matches the strength of the evidence, not the tone you want. List rebuttals: real conditions under which the claim would fail.
+- answer: your final answer to the user, one sentence per entry. Every sentence that asserts something factual must list the ids of the claims or premises it asserts. Do not put anything in the answer that the trace does not argue for.
+
+Search and fetch only as much as the request needs. For simple requests, a few premises and claims are enough."""
+
+
+@dataclass
+class TraceResult:
+    trace: Trace
+    documents: dict[str, str] = field(default_factory=dict)  # url -> fetched plain text
+    usage: dict = field(default_factory=dict)
+    model: str = MODEL
+
+
+def _collect_documents(content: list, docs: dict[str, str]) -> None:
+    for block in content:
+        if block.type != "web_fetch_tool_result":
+            continue
+        result = block.content
+        if getattr(result, "type", None) != "web_fetch_result":
+            continue  # fetch error; the premise will come back "unverified"
+        source = result.content.source
+        text = getattr(source, "data", None)
+        if isinstance(text, str):
+            docs[result.url] = text
+
+
+def build_trace(
+    request: str,
+    *,
+    search: bool = True,
+    effort: str = "high",
+    today: str | None = None,
+    client: anthropic.Anthropic | None = None,
+) -> TraceResult:
+    today = today or dt.date.today().isoformat()
+    params = {"request": request, "search": search, "effort": effort, "today": today, "model": MODEL, "system": SYSTEM}
+    k = cache.key("trace", params)
+    if (hit := cache.get(k)) is not None:
+        return TraceResult(Trace.model_validate(hit["trace"]), hit["documents"], hit["usage"], hit["model"])
+
+    client = client or anthropic.Anthropic()
+    tools = (
+        [
+            {"type": "web_search_20260209", "name": "web_search", "max_uses": 5},
+            {"type": "web_fetch_20260209", "name": "web_fetch", "max_uses": 6},
+        ]
+        if search
+        else []
+    )
+    messages: list = [{"role": "user", "content": request}]
+    docs: dict[str, str] = {}
+    usage = {"input_tokens": 0, "output_tokens": 0}
+
+    for _ in range(5):  # server tools may pause a long turn; resume it
+        with client.messages.stream(
+            model=MODEL,
+            max_tokens=64000,
+            system=SYSTEM.format(today=today),
+            output_config={"effort": effort},
+            output_format=Trace,
+            tools=tools,
+            messages=messages,
+            extra_headers={"anthropic-beta": "server-side-fallback-2026-07-01"},
+            extra_body={"fallbacks": "default"},
+        ) as stream:
+            msg = stream.get_final_message()
+        usage["input_tokens"] += msg.usage.input_tokens
+        usage["output_tokens"] += msg.usage.output_tokens
+        _collect_documents(msg.content, docs)
+        if msg.stop_reason != "pause_turn":
+            break
+        messages.append({"role": "assistant", "content": msg.content})
+
+    if msg.stop_reason == "refusal":
+        raise RuntimeError(f"Claude declined the request: {msg.stop_details}")
+    if msg.stop_reason == "max_tokens":
+        raise RuntimeError("Trace hit max_tokens before finishing.")
+    trace = msg.parsed_output
+    if trace is None:
+        raise RuntimeError(f"No parsed trace (stop_reason={msg.stop_reason}, request_id={msg._request_id})")
+
+    result = TraceResult(trace, docs, usage, msg.model)
+    cache.put(k, {"trace": trace.model_dump(), "documents": docs, "usage": usage, "model": msg.model})
+    return result
