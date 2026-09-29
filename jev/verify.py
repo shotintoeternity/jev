@@ -77,6 +77,43 @@ ADDS_FLAG = 0.8  # at or above: untraced. Between YES and this: traced, but sent
 SENTENCE_FACTUAL = Noul(instructions="`sentence` asserts a fact about the world.")
 
 
+REQUEST_KIND = Choice(
+    instructions="What kind of input is `request`?",
+    criteria={
+        "question": "`request` asks something.",
+        "statement": "`request` asserts that something is true or false about the world.",
+        "instruction": "`request` asks for a task to be done, such as writing, planning, or summarizing.",
+    },
+)
+
+STANCE = Choice(
+    instructions="What does `answer` conclude about whether the assertion in `request` is true?",
+    criteria={
+        "agrees": "`answer` concludes the assertion in `request` is true.",
+        "disagrees": "`answer` concludes the assertion in `request` is false.",
+        "partly": "`answer` concludes the assertion in `request` is partly true or true only in some respects.",
+        "undecided": "`answer` does not reach a conclusion about the assertion in `request`.",
+    },
+)
+
+
+async def stance_async(request: str, answer: str) -> dict:
+    """Is the request a statement, and does the final answer agree with it?"""
+    async with AsyncTypeSafeClient(model=JEV_MODEL) as client:
+        res = await _ask(client, asyncio.Semaphore(1), {"request": request, "answer": answer}, {"kind": REQUEST_KIND, "stance": STANCE})
+    a = res["answers"]
+    return {
+        "kind": a["kind"]["choice"],
+        "kind_confidence": a["kind"]["confidence"],
+        "stance": a["stance"]["choice"],
+        "stance_confidence": a["stance"]["confidence"],
+    }
+
+
+def stance(request: str, answer: str) -> dict:
+    return asyncio.run(stance_async(request, answer))
+
+
 def _noul_conf(p: float) -> float:
     return abs(2 * p - 1)
 

@@ -51,9 +51,12 @@ def render(r: Report) -> str:
 
     s = r.summary()
     m = r.meta
+    st = m.get("stance") or {}
+    if st.get("kind") == "statement":
+        lines += ["", f"YOUR STATEMENT: the answer {st['stance']} ({st['stance_confidence']:.2f})"]
     if r.draft:
         d = r.draft.summary
-        lines += ["", f"CONFIRMED: first draft had {d['problems']} problems in {len(d['flagged_sentences'])}/{d['sentences']} sentences; "
+        lines += ["", f"REVISED: first draft had {d['problems']} problems in {len(d['flagged_sentences'])}/{d['sentences']} sentences; "
                   f"the revision has {s['problems']} in {len(s['flagged_sentences'])}/{s['sentences']}"]
     lines += [
         "",

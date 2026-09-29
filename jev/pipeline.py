@@ -16,7 +16,7 @@ from pydantic import BaseModel
 from .revise import revise
 from .schema import BAD, Trace, Verdict
 from .trace import build_trace
-from .verify import verify
+from .verify import stance, verify
 
 TRACES_DIR = Path(__file__).resolve().parent.parent / "traces"
 TRIGGERS_REVISION = BAD | {"overclaimed"}
@@ -117,6 +117,7 @@ def run(
             meta=meta,
             draft=Stage(trace=tr.trace, verdicts=verdicts, summary=draft_summary),
         )
+    report.meta["stance"] = stance(request, report.trace.answer_text())
     if on_event:
         on_event("confirming", "done", report.summary())
 

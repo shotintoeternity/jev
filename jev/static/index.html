@@ -120,6 +120,9 @@ kbd { font: inherit; border: 1px solid var(--rule); border-bottom-width: 2px; bo
 .outcome { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 14px; margin: 0 0 18px; padding: 10px 14px; border-radius: 10px;
   background: var(--surface); border: 1px solid var(--rule); font-size: 14px; color: var(--slate); }
 .outcome b { color: var(--ink); font-weight: 600; }
+.stance { font-size: 16px; margin: 0 0 10px; }
+.stance b { font-weight: 600; }
+.stance.bad b { color: var(--bad); } .stance.ok b { color: var(--ok); } .stance.warn b { color: var(--warn); }
 .linkbtn { font: inherit; background: none; border: 0; padding: 0; color: var(--accent); cursor: pointer; text-decoration: underline; text-underline-offset: 3px; }
 .viewing-draft .answer { color: var(--slate); }
 
@@ -235,7 +238,7 @@ function absorb(v) {
   if (live.stage === "confirming") { live.done.add("verifying"); if (!live.notes.confirming && !live.skipped) live.notes.confirming = `Rewriting the answer to fix ${plural(live.fix || 0, "problem")}`; }
 }
 
-const STAGES = [["drafting", "Drafting"], ["verifying", "Verifying with Jev"], ["confirming", "Confirming the answer"]];
+const STAGES = [["drafting", "Drafting"], ["verifying", "Verifying with Jev"], ["confirming", "Revising the answer"]];
 
 function answerText(partial) {
   return (partial?.answer || []).map(a => a?.text || "").filter(Boolean).join(" ");
@@ -308,13 +311,24 @@ function toggleDraft() {
   paint(showingDraft ? { ...finalReport, trace: d.trace, verdicts: d.verdicts, summary: d.summary } : finalReport);
 }
 
+const STANCE = {
+  agrees: ["true", "ok"], disagrees: ["false", "bad"], partly: ["partly true", "warn"], undecided: ["not settled", "warn"],
+};
+
+function stanceHTML() {
+  const st = finalReport.meta?.stance;
+  if (!st || st.kind !== "statement" || st.kind_confidence < 0.6 || showingDraft) return "";
+  const [word, lv] = STANCE[st.stance] || [];
+  if (!word) return "";
+  return `<div class="stance ${lv}"><span class="dot ${lv}"></span>Your statement: this answer says it is <b>${word}</b>.</div>`;
+}
+
 function outcomeHTML() {
   const r = finalReport, d = r.draft;
-  if (!d) return `<div class="outcome"><span><b>Verified.</b> Jev found no problems in the first draft, so it stands as the final answer.</span></div>`;
-  const fs = r.summary;
+  if (!d) return `<div class="outcome"><span><b>Checked.</b> Jev found no problems in the first draft, so it stands as the final answer.</span></div>`;
   const line = showingDraft
-    ? `<span><b>First draft.</b> ${plural(d.summary.problems, "problem")} in ${d.summary.flagged_sentences.length} of ${plural(d.summary.sentences, "sentence")}.</span>`
-    : `<span><b>Confirmed.</b> Verification found ${plural(d.summary.problems, "problem")} in the first draft; this revision has ${fs.problems}.</span>`;
+    ? `<span><b>First draft.</b> Jev found ${plural(d.summary.problems, "problem")} in ${d.summary.flagged_sentences.length} of ${plural(d.summary.sentences, "sentence")}.</span>`
+    : `<span><b>Revised after checking.</b> Jev found ${plural(d.summary.problems, "problem")} in the first draft; the final answer has ${r.summary.problems}.</span>`;
   return `<div class="outcome">${line}<button class="linkbtn" type="button" onclick="toggleDraft()">${showingDraft ? "Show final answer" : "Compare with first draft"}</button></div>`;
 }
 
@@ -334,6 +348,7 @@ function paint(r) {
     <div class="result${showingDraft ? " viewing-draft" : ""}">
       <section aria-label="Answer">
         <p class="question">${esc(r.request)}</p>
+        ${stanceHTML()}
         ${outcomeHTML()}
         <p class="answer">${answer}</p>
         <div class="tally">
