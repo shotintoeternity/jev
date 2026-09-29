@@ -3,144 +3,283 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>jev · epistemic check</title>
+<title>Jevin</title>
+<meta name="description" content="Ask anything. Jevin shows which parts of the answer its evidence supports.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600&family=Newsreader:opsz,wght@6..72,400;6..72,500&display=swap" rel="stylesheet">
 <style>
 :root {
-  --bg: #fbfaf7; --panel: #ffffff; --ink: #1d1b18; --muted: #6b665e; --line: #e4e0d8;
-  --good: #2f7d4f; --good-bg: #e8f3ec; --warn: #9a6b00; --warn-bg: #fbf1d9;
-  --bad: #b3261e; --bad-bg: #fbe6e4; --accent: #3b5bdb;
-  --mono: ui-monospace, "SF Mono", Menlo, monospace;
+  --paper: #f5f6f8; --surface: #ffffff; --ink: #18202c; --slate: #5a6474; --faint: #8a93a3; --rule: #dde1e8;
+  --accent: #2b3f8f; --accent-ink: #ffffff; --focus: #2b3f8f;
+  --ok: #2c6e55; --ok-wash: #e6f1ec; --warn: #9a6512; --warn-wash: #f7eedd; --bad: #a3312a; --bad-wash: #f8e7e5;
+  --select: #e9ecf7;
+  --serif: "Newsreader", Georgia, serif; --sans: "Instrument Sans", system-ui, sans-serif;
 }
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
-    --bg: #161513; --panel: #1f1d1a; --ink: #ece8e1; --muted: #9c968c; --line: #33302b;
-    --good: #6fcf97; --good-bg: #1c2b22; --warn: #e6b450; --warn-bg: #2d2615;
-    --bad: #f28b82; --bad-bg: #331c1a; --accent: #8ea4ff;
+    --paper: #12161d; --surface: #191e27; --ink: #e5e9ef; --slate: #9aa3b2; --faint: #6c7584; --rule: #2a313d;
+    --accent: #8ea2f2; --accent-ink: #12161d; --focus: #8ea2f2;
+    --ok: #7cc4a4; --ok-wash: #1a2a24; --warn: #e0b05e; --warn-wash: #2c2517; --bad: #ee8f86; --bad-wash: #2f1c1b;
+    --select: #222a3d;
   }
 }
 * { box-sizing: border-box; }
-body { margin: 0; background: var(--bg); color: var(--ink); font: 16px/1.55 system-ui, -apple-system, sans-serif; }
-main { max-width: 860px; margin: 0 auto; padding: 32px 16px 80px; }
-h1 { font-size: 22px; margin: 0 0 4px; letter-spacing: -0.01em; }
-.sub { color: var(--muted); margin: 0 0 24px; font-size: 14px; }
-form { display: flex; flex-direction: column; gap: 10px; }
-textarea { width: 100%; min-height: 84px; padding: 12px; font: inherit; color: var(--ink); background: var(--panel);
-  border: 1px solid var(--line); border-radius: 8px; resize: vertical; }
-.row { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
-button { font: inherit; padding: 8px 18px; border-radius: 8px; border: 0; background: var(--accent); color: #fff; cursor: pointer; }
-button:disabled { opacity: .5; cursor: default; }
-label.opt { color: var(--muted); font-size: 14px; display: flex; gap: 6px; align-items: center; }
-#status { color: var(--muted); font-size: 14px; }
-section { margin-top: 28px; }
-h2 { font-size: 13px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); margin: 0 0 10px; }
-.answer { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 16px 18px; font-size: 17px; }
-.s { border-radius: 4px; padding: 1px 2px; cursor: help; }
-.s.good { background: transparent; }
-.s.warn { background: var(--warn-bg); }
-.s.bad { background: var(--bad-bg); text-decoration: underline wavy var(--bad); text-underline-offset: 4px; }
-.stats { display: flex; gap: 18px; flex-wrap: wrap; font-size: 14px; color: var(--muted); margin-top: 10px; }
-.stats b { color: var(--ink); }
-.item { background: var(--panel); border: 1px solid var(--line); border-left: 4px solid var(--good); border-radius: 8px;
-  padding: 10px 14px; margin-bottom: 8px; }
-.item.warn { border-left-color: var(--warn); } .item.bad { border-left-color: var(--bad); }
-.item .head { display: flex; gap: 8px; align-items: baseline; }
-.id { font-family: var(--mono); font-size: 12px; color: var(--muted); min-width: 26px; }
-.meta { font-size: 13px; color: var(--muted); margin-top: 4px; overflow-wrap: anywhere; }
-.meta a { color: var(--accent); }
-.tags { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 6px; }
-.tag { font-family: var(--mono); font-size: 12px; padding: 1px 7px; border-radius: 999px; background: var(--good-bg); color: var(--good); }
-.tag.warn { background: var(--warn-bg); color: var(--warn); } .tag.bad { background: var(--bad-bg); color: var(--bad); }
-.legend { font-size: 13px; color: var(--muted); display: flex; gap: 14px; flex-wrap: wrap; margin-top: 8px; }
-.err { color: var(--bad); }
+html { -webkit-text-size-adjust: 100%; }
+body { margin: 0; background: var(--paper); color: var(--ink); font: 15px/1.5 var(--sans); }
+:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; border-radius: 3px; }
+.wrap { max-width: 1120px; margin: 0 auto; padding: 0 16px; }
+
+header { padding: 28px 0 20px; display: flex; align-items: baseline; gap: 14px; flex-wrap: wrap; }
+.mark { font: 500 26px/1 var(--serif); letter-spacing: -0.01em; margin: 0; }
+.tagline { color: var(--slate); margin: 0; font-size: 14px; }
+
+.composer { max-width: 720px; background: var(--surface); border: 1px solid var(--rule); border-radius: 12px; padding: 4px 4px 4px 16px;
+  display: flex; align-items: flex-end; gap: 8px; transition: border-color .15s; }
+.composer:focus-within { border-color: var(--accent); }
+textarea { flex: 1; border: 0; outline: none !important; resize: none; background: transparent; color: var(--ink); font: 16px/1.5 var(--sans);
+  padding: 10px 0; min-height: 44px; max-height: 220px; }
+textarea::placeholder { color: var(--faint); }
+button.send { font: 500 14px var(--sans); border: 0; border-radius: 9px; padding: 10px 16px; margin: 2px; background: var(--accent);
+  color: var(--accent-ink); cursor: pointer; white-space: nowrap; }
+button.send:disabled { opacity: .45; cursor: default; }
+.below { max-width: 720px; display: flex; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin: 8px 2px 0; font-size: 13px; color: var(--faint); }
+.below label { display: inline-flex; gap: 6px; align-items: center; cursor: pointer; color: var(--slate); }
+.below input { accent-color: var(--accent); margin: 0; }
+kbd { font: inherit; border: 1px solid var(--rule); border-bottom-width: 2px; border-radius: 4px; padding: 0 4px; }
+
+#status { margin-top: 28px; color: var(--slate); font-size: 14px; display: flex; gap: 10px; align-items: center; min-height: 20px; }
+.spinner { width: 14px; height: 14px; border: 2px solid var(--rule); border-top-color: var(--accent); border-radius: 50%; animation: spin .9s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .spinner { animation: none; } }
+.error { color: var(--bad); }
+
+.recent { margin-top: 36px; max-width: 720px; }
+.recent h2, .notes h2 { font: 600 13px/1.3 var(--sans); color: var(--slate); margin: 0 0 10px; }
+.recent a { display: block; padding: 8px 0; border-top: 1px solid var(--rule); color: var(--ink); text-decoration: none; }
+.recent a:hover { color: var(--accent); }
+.recent small { color: var(--faint); margin-left: 8px; }
+
+.result { display: grid; grid-template-columns: minmax(0, 1fr); gap: 32px; margin-top: 28px; padding-bottom: 80px; }
+@media (min-width: 980px) { .result { grid-template-columns: minmax(0, 640px) minmax(0, 1fr); gap: 56px; } .notes { position: sticky; top: 24px; align-self: start; max-height: calc(100vh - 48px); overflow-y: auto; } }
+
+.question { font: 500 14px/1.45 var(--sans); color: var(--slate); margin: 0 0 14px; }
+.answer { font: 400 20px/1.62 var(--serif); margin: 0; }
+.s { cursor: pointer; border-radius: 3px; padding: 1px; transition: background .12s; }
+.s:hover { background: var(--select); }
+.s.sel { background: var(--select); box-shadow: 0 0 0 1px var(--accent) inset; }
+.s.bad { text-decoration: underline 2px var(--bad); text-underline-offset: 5px; }
+.s.warn { text-decoration: underline dotted 2px var(--warn); text-underline-offset: 5px; }
+.tally { display: flex; flex-wrap: wrap; gap: 6px 18px; margin: 22px 0 0; padding: 14px 0 0; border-top: 1px solid var(--rule); font-size: 13px; color: var(--slate); }
+.tally b { color: var(--ink); font-weight: 600; }
+.dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 6px; vertical-align: 1px; }
+.dot.ok { background: var(--ok); } .dot.warn { background: var(--warn); } .dot.bad { background: var(--bad); }
+
+.notes { border-left: 1px solid var(--rule); padding-left: 24px; }
+@media (max-width: 979px) { .notes { border-left: 0; padding-left: 0; border-top: 1px solid var(--rule); padding-top: 20px; } }
+.notes .hint { color: var(--slate); font-size: 14px; margin: 0; }
+.quoted { font: 400 16px/1.5 var(--serif); margin: 0 0 12px; }
+.node { padding: 12px 0; border-top: 1px solid var(--rule); }
+.nested .node:first-child { border-top: 0; }
+.node-head { display: flex; gap: 10px; align-items: baseline; }
+.node-id { font-size: 12px; color: var(--faint); min-width: 22px; }
+.node-text { font-size: 14px; }
+.node-text i { color: var(--slate); font-style: normal; }
+.sub { font-size: 13px; color: var(--slate); margin: 6px 0 0 32px; overflow-wrap: anywhere; }
+.sub a { color: var(--accent); }
+.sub q { font-family: var(--serif); font-size: 14px; color: var(--ink); }
+.checks { display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 0 0 32px; }
+.notes > .checks, .notes > .checks + .sub { margin-left: 0; }
+.chip { font-size: 12px; padding: 2px 8px; border-radius: 999px; background: var(--ok-wash); color: var(--ok); }
+.chip.warn { background: var(--warn-wash); color: var(--warn); } .chip.bad { background: var(--bad-wash); color: var(--bad); }
+.nested { margin-left: 32px; }
+
+.argument { margin-top: 36px; }
+.argument details { border-top: 1px solid var(--rule); }
+.argument details:last-child { border-bottom: 1px solid var(--rule); }
+.argument summary { cursor: pointer; padding: 12px 0; font-size: 14px; color: var(--slate); }
+.argument summary:hover { color: var(--ink); }
+.foot { margin-top: 20px; font-size: 12px; color: var(--faint); }
 </style>
 </head>
 <body>
-<main>
-  <h1>jev</h1>
-  <p class="sub">Claude answers and records its argument (Toulmin model). Jev checks every link: does the source say it, does the conclusion follow, is the confidence earned, is anything in the answer unargued.</p>
+<div class="wrap">
+  <header>
+    <h1 class="mark">Jevin</h1>
+    <p class="tagline">Answers that show which parts the evidence supports.</p>
+  </header>
+
   <form id="f">
-    <textarea id="q" placeholder="Ask anything…" required maxlength="4000"></textarea>
-    <div class="row">
-      <button id="go">Check</button>
-      <label class="opt"><input type="checkbox" id="search" checked> use web sources</label>
-      <span id="status"></span>
+    <div class="composer">
+      <textarea id="q" rows="1" placeholder="Ask a question" maxlength="4000" aria-label="Question" required></textarea>
+      <button class="send" id="go" type="submit">Check</button>
+    </div>
+    <div class="below">
+      <span><kbd>Enter</kbd> to check, <kbd>Shift</kbd>+<kbd>Enter</kbd> for a new line</span>
+      <label><input type="checkbox" id="search" checked> Use web sources</label>
     </div>
   </form>
+
+  <div id="status" role="status" aria-live="polite"></div>
   <div id="out"></div>
-</main>
+</div>
+
 <script>
 const BAD = new Set(["contradicted","unsupported","fabricated","non_sequitur","tainted","untraced"]);
 const WARN = new Set(["unverified","weak","overclaimed"]);
-const level = vs => vs.some(v => BAD.has(v.status)) ? "bad" : vs.some(v => WARN.has(v.status) || v.needs_review) ? "warn" : "good";
-const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
-const $ = id => document.getElementById(id);
-// Works at a domain root or under a path prefix such as /s/nook-abc/.
+const LABEL = {
+  supported: "Source supports it", contradicted: "Source contradicts it", unsupported: "Source doesn't say this",
+  fabricated: "Quote not found on the page", unverified: "Not checked against a source", follows: "Follows from its grounds",
+  weak: "Weak link", non_sequitur: "Doesn't follow", overclaimed: "Stated more strongly than the evidence",
+  tainted: "Rests on a failed step", traced: "Backed by the argument", untraced: "Says more than the argument shows", ok: "Checked",
+};
+const BASIS = { source: "from a source", memory: "from Claude's memory", user: "from your question", definition: "by definition" };
 const BASE = location.pathname.endsWith("/") ? location.pathname : location.pathname + "/";
+const $ = id => document.getElementById(id);
+const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const levelOf = v => BAD.has(v.status) ? "bad" : (WARN.has(v.status) || v.needs_review) ? "warn" : "ok";
+const level = vs => vs.some(v => levelOf(v) === "bad") ? "bad" : vs.some(v => levelOf(v) === "warn") ? "warn" : "ok";
+const host = u => { try { return new URL(u).hostname.replace(/^www\./, ""); } catch { return u; } };
+let report = null, byTarget = {}, nodes = {};
 
-function tags(vs) {
-  return `<div class="tags">${vs.map(v => {
-    const lv = BAD.has(v.status) ? "bad" : (WARN.has(v.status) || v.needs_review) ? "warn" : "good";
-    const conf = v.confidence != null ? ` ${v.confidence.toFixed(2)}` : "";
-    return `<span class="tag ${lv}" title="${esc(v.note)}">${esc(v.check)}: ${esc(v.status)}${conf}</span>`;
-  }).join("")}</div>${vs.filter(v => v.note).map(v => `<div class="meta">${esc(v.note)}</div>`).join("")}`;
-}
+// ---- composer --------------------------------------------------------------
+const q = $("q");
+const grow = () => { q.style.height = "auto"; q.style.height = Math.min(q.scrollHeight, 220) + "px"; };
+q.addEventListener("input", grow);
+q.addEventListener("keydown", e => {
+  if (e.key === "Enter" && !e.shiftKey && !e.isComposing) { e.preventDefault(); $("f").requestSubmit(); }
+});
 
-function render(r) {
-  const by = {};
-  for (const v of r.verdicts) (by[v.target] ??= []).push(v);
-  const s = r.summary, m = r.meta, t = r.trace;
-  const answer = t.answer.map((a, i) => {
-    const vs = by[`S${i+1}`] ?? [];
-    const tip = [a.claim_ids.join(", ") || "no claims cited", ...vs.map(v => `${v.check}: ${v.status}${v.note ? " – " + v.note : ""}`)].join("\n");
-    return `<span class="s ${level(vs)}" title="${esc(tip)}">${esc(a.text)}</span>`;
-  }).join(" ");
-  const premises = t.premises.map(p => {
-    const vs = by[p.id] ?? [];
-    const src = p.source_url ? `<div class="meta"><a href="${esc(p.source_url)}" target="_blank" rel="noreferrer">${esc(p.source_url)}</a>${p.quote ? ` – “${esc(p.quote)}”` : ""}</div>` : "";
-    return `<div class="item ${level(vs)}"><div class="head"><span class="id">${p.id}</span><span>${esc(p.statement)}</span></div>
-      <div class="meta">basis: ${esc(p.basis_kind)} · falsified by: ${esc(p.falsifiable_by)}</div>${src}${tags(vs)}</div>`;
-  }).join("");
-  const claims = t.claims.map(c => {
-    const vs = by[c.id] ?? [];
-    return `<div class="item ${level(vs)}"><div class="head"><span class="id">${c.id}</span><span><i>${esc(c.qualifier)}</i> ${esc(c.claim)}</span></div>
-      <div class="meta">grounds: ${esc(c.grounds.join(", "))} · warrant: ${esc(c.warrant)}</div>
-      ${c.backing ? `<div class="meta">backing: ${esc(c.backing)}</div>` : ""}
-      ${c.rebuttals.length ? `<div class="meta">unless: ${esc(c.rebuttals.join("; "))}</div>` : ""}${tags(vs)}</div>`;
-  }).join("");
-  $("out").innerHTML = `
-    <section><h2>Answer</h2><div class="answer">${answer}</div>
-      <div class="legend"><span><span class="s bad">underlined</span> = a check failed</span><span><span class="s warn">shaded</span> = unverified or uncertain</span><span>hover a sentence for details</span></div>
-      <div class="stats"><span><b>${s.sentences - s.flagged_sentences.length}/${s.sentences}</b> sentences clean</span>
-        <span><b>${s.problems}</b> problems</span><span><b>${s.unverified_premises.length}</b> unverified premises</span>
-        <span><b>${s.needs_review}</b> low-confidence</span>
-        <span>claude ${m.trace_seconds}s · jev ${m.verify_seconds}s (${m.jev_calls} calls)</span></div></section>
-    <section><h2>Premises</h2>${premises}</section>
-    <section><h2>Claims</h2>${claims}</section>`;
-}
-
-async function poll(id) {
-  const r = await (await fetch(`${BASE}api/jobs/${id}`)).json();
-  if (r.status === "running") {
-    $("status").textContent = `Claude is researching and building the trace… ${Math.round(r.elapsed)}s`;
-    return setTimeout(() => poll(id), 2000);
-  }
-  $("go").disabled = false;
-  if (r.status === "error") { $("status").innerHTML = `<span class="err">${esc(r.error)}</span>`; return; }
-  $("status").textContent = `Done in ${Math.round(r.elapsed)}s`;
-  history.replaceState(null, "", `#${id}`);
-  render(r.report);
-}
+function busy(on) { $("go").disabled = on; q.readOnly = on; }
+function status(html, spin) { $("status").innerHTML = (spin ? '<span class="spinner" aria-hidden="true"></span>' : "") + html; }
 
 $("f").addEventListener("submit", async e => {
   e.preventDefault();
-  $("go").disabled = true; $("out").innerHTML = ""; $("status").textContent = "Starting…";
-  const res = await fetch(`${BASE}api/check`, {method: "POST", headers: {"Content-Type": "application/json"},
-    body: JSON.stringify({request: $("q").value, search: $("search").checked})});
-  const body = await res.json();
-  if (!res.ok) { $("go").disabled = false; $("status").innerHTML = `<span class="err">${esc(body.detail)}</span>`; return; }
-  poll(body.id);
+  const text = q.value.trim();
+  if (!text || $("go").disabled) return;
+  busy(true); $("out").innerHTML = ""; status("Starting", true);
+  try {
+    const res = await fetch(`${BASE}api/check`, {method: "POST", headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({request: text, search: $("search").checked})});
+    const body = await res.json();
+    if (!res.ok) throw new Error(body.detail || `The server returned ${res.status}.`);
+    history.replaceState(null, "", `#${body.id}`);
+    poll(body.id);
+  } catch (err) { busy(false); status(`<span class="error">${esc(err.message)}</span>`); }
 });
-if (location.hash.length > 1) { $("go").disabled = true; poll(location.hash.slice(1)); }
+
+async function poll(id) {
+  let r;
+  try { r = await (await fetch(`${BASE}api/jobs/${id}`)).json(); }
+  catch { return setTimeout(() => poll(id), 3000); }
+  if (r.status === "running") {
+    status(`Researching and writing out the argument, ${Math.round(r.elapsed)}s`, true);
+    return setTimeout(() => poll(id), 2000);
+  }
+  busy(false);
+  if (r.status === "error") { status(`<span class="error">${esc(r.error)}</span>`); return; }
+  if (!r.report) { status(`<span class="error">That check was not found.</span>`); return; }
+  if (!q.value) { q.value = r.request; grow(); }
+  status("");
+  render(r.report);
+}
+
+// ---- result ----------------------------------------------------------------
+function chips(vs) {
+  const shown = vs.filter(v => v.status !== "traced" || v.needs_review);
+  if (!shown.length) return "";
+  return `<div class="checks">${shown.map(v => {
+    const conf = v.confidence != null ? ` ${Math.round(v.confidence * 100)}%` : "";
+    return `<span class="chip ${levelOf(v)}" title="${esc(v.note || v.check)}">${esc(LABEL[v.status] || v.status)}${conf}</span>`;
+  }).join("")}</div>${vs.filter(v => v.note && levelOf(v) !== "ok" && !v.note.startsWith("basis:")).map(v => `<div class="sub">${esc(v.note)}</div>`).join("")}`;
+}
+
+function premiseHTML(p) {
+  const vs = byTarget[p.id] ?? [];
+  const quote = p.quote ? `: <q>${esc(p.quote.replace(/\\n/g, " "))}</q>` : "";
+  const src = p.source_url ? `<div class="sub"><a href="${esc(p.source_url)}" target="_blank" rel="noreferrer">${esc(host(p.source_url))}</a>${quote}</div>` : "";
+  return `<div class="node"><div class="node-head"><span class="node-id">${p.id}</span><span class="node-text">${esc(p.statement)} <i>(${esc(BASIS[p.basis_kind] || p.basis_kind)})</i></span></div>${src}${chips(vs)}</div>`;
+}
+
+function claimHTML(c, depth = 0) {
+  const vs = byTarget[c.id] ?? [];
+  const grounds = depth < 2 ? c.grounds.map(g => nodes[g]).filter(Boolean)
+    .map(n => n.claim ? claimHTML(n, depth + 1) : premiseHTML(n)).join("") : "";
+  return `<div class="node"><div class="node-head"><span class="node-id">${c.id}</span><span class="node-text">${esc(c.claim)} <i>(${esc(c.qualifier)})</i></span></div>
+    <div class="sub">Because: ${esc(c.warrant)}</div>${c.rebuttals.length ? `<div class="sub">Unless: ${esc(c.rebuttals.join("; "))}</div>` : ""}
+    ${chips(vs)}${grounds ? `<div class="nested">${grounds}</div>` : ""}</div>`;
+}
+
+function showNotes(i) {
+  document.querySelectorAll(".s").forEach(el => el.classList.toggle("sel", Number(el.dataset.i) === i));
+  const s = report.trace.answer[i];
+  const vs = byTarget[`S${i + 1}`] ?? [];
+  const cited = s.claim_ids.map(id => nodes[id]).filter(Boolean);
+  $("notes").innerHTML = `<h2>Why this sentence</h2><p class="quoted">${esc(s.text)}</p>${chips(vs)}
+    ${cited.length ? cited.map(n => n.claim ? claimHTML(n) : premiseHTML(n)).join("") : `<p class="hint">This sentence doesn't cite any part of the argument.</p>`}`;
+}
+
+function render(r) {
+  report = r; byTarget = {}; nodes = {};
+  for (const v of r.verdicts) (byTarget[v.target] ??= []).push(v);
+  for (const p of r.trace.premises) nodes[p.id] = p;
+  for (const c of r.trace.claims) nodes[c.id] = c;
+  const s = r.summary, m = r.meta, t = r.trace;
+  const counts = { ok: 0, warn: 0, bad: 0 };
+  const answer = t.answer.map((a, i) => {
+    const lv = level(byTarget[`S${i + 1}`] ?? []); counts[lv]++;
+    return `<span class="s ${lv}" data-i="${i}" tabindex="0" role="button">${esc(a.text)}</span>`;
+  }).join(" ");
+  $("out").innerHTML = `
+    <div class="result">
+      <section aria-label="Answer">
+        <p class="question">${esc(r.request)}</p>
+        <p class="answer">${answer}</p>
+        <div class="tally">
+          <span><span class="dot ok"></span><b>${counts.ok}</b> backed by the argument</span>
+          <span><span class="dot warn"></span><b>${counts.warn}</b> uncertain</span>
+          <span><span class="dot bad"></span><b>${counts.bad}</b> not supported</span>
+          <span><b>${s.unverified_premises.length}</b> of ${s.premises} premises not checked against a source</span>
+        </div>
+        <div class="argument">
+          <details><summary>Full argument: ${t.claims.length} claims</summary>${t.claims.map(c => claimHTML(c, 2)).join("")}</details>
+          <details><summary>Evidence: ${t.premises.length} premises</summary>${t.premises.map(premiseHTML).join("")}</details>
+        </div>
+        <p class="foot">Written by ${esc(m.claude_model)} in ${Math.round(m.trace_seconds)}s. Checked by ${esc((m.jev_models || []).join(", "))} in ${m.verify_seconds}s across ${m.jev_calls} questions.</p>
+      </section>
+      <aside class="notes" id="notes" aria-live="polite">
+        <h2>Why this sentence</h2>
+        <p class="hint">Select a sentence to see the claims and sources behind it. Underlined sentences failed a check.</p>
+      </aside>
+    </div>`;
+  document.querySelectorAll(".s").forEach(el => {
+    const open = () => showNotes(Number(el.dataset.i));
+    el.addEventListener("click", open);
+    el.addEventListener("keydown", e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); open(); } });
+  });
+  const first = t.answer.findIndex((_, i) => level(byTarget[`S${i + 1}`] ?? []) === "bad");
+  if (first >= 0 && matchMedia("(min-width: 980px)").matches) showNotes(first);
+}
+
+// ---- recent ----------------------------------------------------------------
+async function recent() {
+  try {
+    const seen = new Set();
+    const rows = (await (await fetch(`${BASE}api/jobs`)).json())
+      .filter(j => j.status === "done" && !seen.has(j.request) && seen.add(j.request)).slice(0, 6);
+    if (!rows.length || $("out").innerHTML) return;
+    $("out").innerHTML = `<section class="recent"><h2>Recent</h2>${rows.map(j =>
+      `<a href="#${j.id}">${esc(j.request)}<small>${new Date(j.created * 1000).toLocaleDateString()}</small></a>`).join("")}</section>`;
+  } catch {}
+}
+
+function fromHash() {
+  if (location.hash.length > 1) { busy(true); status("Loading", true); poll(location.hash.slice(1)); }
+  else { $("out").innerHTML = ""; status(""); recent(); }
+}
+window.addEventListener("hashchange", fromHash);
+fromHash();
+q.focus();
 </script>
 </body>
 </html>

@@ -1,4 +1,4 @@
-# jev
+# Jevin
 
 Answer any request with an **epistemic trace**, then check the trace with **Jev**, [TypeSafe](https://docs.typesafe.ai/)'s System One model.
 
