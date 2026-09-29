@@ -2,6 +2,7 @@
 
     uv run python -m evals.inject            # generate (cached) traces, mutate, verify, report
     uv run python -m evals.inject --workers 4
+    uv run python -m evals.inject --requests holdout.txt   # thresholds were never tuned on these
 
 Claude traces are generated once and cached; after that every run only calls Jev (near free).
 """
@@ -116,9 +117,10 @@ def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--workers", type=int, default=4)
     ap.add_argument("--seeds", type=int, default=3, help="mutants per mutator per trace")
+    ap.add_argument("--requests", default="requests.txt", help="file under evals/ (holdout.txt = never tuned on)")
     a = ap.parse_args()
 
-    requests = [r.strip() for r in (HERE / "requests.txt").read_text().splitlines() if r.strip()]
+    requests = [r.strip() for r in (HERE / a.requests).read_text().splitlines() if r.strip()]
     print(f"building {len(requests)} traces (cached after first run)...")
     with ThreadPoolExecutor(a.workers) as ex:
         results: list[TraceResult | Exception] = list(ex.map(lambda r: _safe(build_trace, r, today=TODAY), requests))

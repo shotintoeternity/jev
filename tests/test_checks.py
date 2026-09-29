@@ -106,3 +106,8 @@ def test_number_check_tolerates_decades_and_broken_decimals():
 
 def test_dates_with_commas_are_not_merged():
     assert checks.missing_numbers("Announced in December 2020.", "Published December 8, 2020.") == []
+
+
+def test_literal_backslash_n_in_quote_matches_a_line_break():
+    doc = "Nobel Prize in Physics 1903\nNobel Prize in Chemistry 1911"
+    assert checks.locate_quote("Nobel Prize in Physics 1903\\nNobel Prize in Chemistry 1911", doc)[0] == "found"
