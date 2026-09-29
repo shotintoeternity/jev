@@ -1,6 +1,6 @@
 # jev
 
-Answer any request with an **epistemic trace**, then check the trace with **Jev** (TypeSafe's System One model).
+Answer any request with an **epistemic trace**, then check the trace with **Jev**, [TypeSafe](https://docs.typesafe.ai/)'s System One model.
 
 1. **Claude** (`claude-opus-5-5`, with web search and fetch) answers the request and records its argument in Toulmin form: premises with a basis, source URL and verbatim quote; claims with grounds, warrant, backing, qualifier and rebuttals; and the answer split into sentences, each citing the claims it asserts.
 2. **Code** checks what code can check exactly: is each quote really in the fetched page, do references point at real ids, and which conclusions rest on a failed premise.
