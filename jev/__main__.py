@@ -59,7 +59,7 @@ def render(r: Report) -> str:
         lines += ["", f"REVISED: first draft had {d['problems']} problems in {len(d['flagged_sentences'])}/{d['sentences']} sentences; "
                   f"the revision has {s['problems']} in {len(s['flagged_sentences'])}/{s['sentences']}"]
     if m.get("beliefs"):
-        lines += ["", "HOW SURE (estimates; weights not yet fitted)"]
+        lines += ["", "HOW SURE" + ("" if m["beliefs"][0].get("fitted") else " (estimates; weights not yet fitted)")]
         for b in m["beliefs"]:
             lines.append(f"  {b['id']} {b['posterior']:.0%} (before research {b['prior']:.0%}, {b['checked']} passages weighed) {b['claim'][:110]}")
             for e in b["evidence"]:

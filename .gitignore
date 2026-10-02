@@ -9,3 +9,4 @@ evals/data/*.csv
 evals/data/calibration_results.jsonl
 evals/gate/dbs/
 evals/gate/runs/
+evals/data/evidence/pages/

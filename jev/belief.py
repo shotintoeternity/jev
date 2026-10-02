@@ -13,7 +13,9 @@ The weights are set by hand, not yet fitted, so the probability is labeled an es
 """
 
 import asyncio
+import json
 import math
+from pathlib import Path
 from urllib.parse import urlsplit
 
 import anthropic
@@ -41,6 +43,19 @@ SAME_SITE_DISCOUNT = 0.5
 # Until the weights are fitted, never claim more certainty than Claude's own best-calibrated range (its 96% claims
 # were true 95% of the time in the calibration benchmark).
 POSTERIOR_FLOOR = 0.03
+
+# Fitted by evals/fit.py on the labeled claim set. Without the file, the hand-set weights above apply.
+_FITTED = Path(__file__).with_name("weights.json")
+FITTED = json.loads(_FITTED.read_text()) if _FITTED.exists() else None
+
+
+def tier_shift(tier: str) -> float:
+    """Log-odds added by one fully supporting, fully relevant passage from this kind of source."""
+    return FITTED["tiers"][tier] if FITTED else EVIDENCE_SCALE * TIER_WEIGHT[tier]
+
+
+def start(prior: float) -> float:
+    return FITTED["intercept"] + FITTED["prior"] * _logit(prior) if FITTED else _logit(prior)
 
 
 class ClaimPrior(BaseModel):
@@ -223,7 +238,7 @@ def weigh(request: str, trace: Trace, documents: dict[str, str], *, today: str, 
     beliefs = []
     for cid, text in claims.items():
         ev = [it for it in items if it["claim_id"] == cid]
-        x, sites = _logit(prior[cid]), {}
+        x, sites = start(prior[cid]), {}
         for it in sorted(ev, key=lambda i: -TIER_WEIGHT.get(i.get("tier"), 0)):
             if "stance" not in it:
                 it["shift"] = 0.0
@@ -232,9 +247,10 @@ def weigh(request: str, trace: Trace, documents: dict[str, str], *, today: str, 
             d = SAME_SITE_DISCOUNT ** sites.get(site, 0)
             sites[site] = sites.get(site, 0) + 1
             # counts only as much as the passage speaks to the claim at all
-            it["shift"] = EVIDENCE_SCALE * TIER_WEIGHT[it["tier"]] * d * (it["p_support"] - it["p_contradict"]) * (1 - it["p_silent"])
+            it["shift"] = tier_shift(it["tier"]) * d * (it["p_support"] - it["p_contradict"]) * (1 - it["p_silent"])
             x += it["shift"]
-        post = min(max(_sigmoid(x), POSTERIOR_FLOOR), 1 - POSTERIOR_FLOOR)
+        floor = 0.01 if FITTED else POSTERIOR_FLOOR  # fitted weights were not overconfident on held-out claims
+        post = min(max(_sigmoid(x), floor), 1 - floor)
         crux = None
         if crux_scores.get(cid):
             g, left = min(crux_scores[cid], key=lambda z: z[1])
@@ -247,6 +263,6 @@ def weigh(request: str, trace: Trace, documents: dict[str, str], *, today: str, 
         beliefs.append({
             "id": cid, "claim": text, "prior": prior[cid], "posterior": post,
             "evidence": [{k: v for k, v in it.items() if k != "passage"} | {"excerpt": (it["passage"] or "")[:600]} for it in ev],
-            "checked": sum("stance" in it for it in ev), "crux": crux,
+            "checked": sum("stance" in it for it in ev), "crux": crux, "fitted": FITTED is not None,
         })
     return beliefs, {"contrary_usage": usage, "passages_checked": len(checkable)}

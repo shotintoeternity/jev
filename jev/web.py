@@ -22,7 +22,7 @@ load_dotenv()
 
 DB_PATH = os.environ.get("POCKETNOOK_SQLITE_PATH", str(Path(__file__).resolve().parent.parent / "jev.db"))
 STATIC = Path(__file__).parent / "static"
-VERSION = "2026-09-29.8"  # bump on deploy-relevant changes; shown at /api/health
+VERSION = "2026-10-02.1"  # bump on deploy-relevant changes; shown at /api/health
 MAX_RUNNING = 3  # each run spends real money on Claude
 REQUIRED_KEYS = ("ANTHROPIC_API_KEY", "TYPESAFE_API_KEY")
 

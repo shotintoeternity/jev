@@ -1,0 +1,14 @@
+{
+ "intercept": 0.1756886312579086,
+ "prior": 0.5841216218200018,
+ "tiers": {
+  "primary": 1.1628864752338333,
+  "scholarly": 1.243320110501171,
+  "reference": 1.2974279821339845,
+  "press": 0.05129463398199693,
+  "informal": -0.5910856910475213
+ },
+ "fitted_on": "100 claims (evals/data/claims.jsonl, tune split)",
+ "test_brier": 0.1005848267225927,
+ "test_auroc": 0.9412484700122399
+}

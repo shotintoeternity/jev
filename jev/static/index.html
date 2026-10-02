@@ -362,7 +362,7 @@ function beliefsHTML() {
   return `<section class="beliefs" aria-label="How sure, and why"><h2>How sure, and why</h2>
     <p class="hint">Each claim's estimate combines what Claude believed before looking with every passage found for or against it. The marker on each bar is where Claude started.</p>
     ${bs.map(b => beliefHTML(b)).join("")}
-    <p class="honesty">These estimates are not Claude's hidden reasoning. They show what the answer depends on: the evidence found, how it moved the estimate, and the one premise each claim cannot do without. The weights are not yet fitted to real outcomes, so treat the numbers as estimates.</p></section>`;
+    <p class="honesty">These estimates are not Claude's hidden reasoning. They show what the answer depends on: the evidence found, how it moved the estimate, and the one premise each claim cannot do without. ${(bs[0] && bs[0].fitted) ? "How much each kind of source counts was fitted on 100 fact-checked claims and tested on 100 others." : "The weights are not yet fitted to real outcomes, so treat the numbers as estimates."}</p></section>`;
 }
 
 function showNotes(i) {
