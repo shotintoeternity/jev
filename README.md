@@ -1,3 +1,5 @@
+> **Shelved 2026-10-02.** The working pieces (Jev grounding checks, the inline gate) continue in `~/ai/jevin2` as a Claude Code plugin. Results below remain valid.
+
 # Jevin
 
 Answer any request with an **epistemic trace**, then check the trace with **Jev**, [TypeSafe](https://docs.typesafe.ai/)'s System One model.
